@@ -68,7 +68,7 @@ def call_gemini(
             temperature=0.1,
             top_p=0.8,
             top_k=20,
-            max_output_tokens=2048,
+            max_output_tokens=1200,
             response_mime_type="application/json",
             response_json_schema=schema,
         ),
