@@ -184,6 +184,7 @@ def main() -> None:
     analysis_dir = ROOT_DIR / "data" / "processed" / "analysis"
     schema_path = ROOT_DIR / "config" / "gemini_schema.json"
     state_path = ROOT_DIR / "data" / "state" / "processed_doc_ids.json"
+    last_daily_state_path = ROOT_DIR / "data" / "state" / "last_daily_analyzed_doc_ids.json"
 
     analysis_dir.mkdir(parents=True, exist_ok=True)
 
