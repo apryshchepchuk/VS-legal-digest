@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from common import ROOT_DIR, iter_tsv_rows, load_json, load_settings, parse_date, setup_logging
+from common import ROOT_DIR, load_json, load_settings, parse_date, setup_logging
 
 
 def format_date_for_display(value: str) -> str:
@@ -20,24 +20,32 @@ def safe_text(value: object, fallback: str = "—") -> str:
     return text if text else fallback
 
 
-def build_period(settings: dict) -> tuple[str, str]:
+def parse_datetime_safe(value: str) -> datetime | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
+def build_period(settings: dict) -> tuple[str, str, datetime]:
     tz_name = settings.get("timezone", "Europe/Kyiv")
-    lookback_days = int(settings.get("lookback_days", 7))
-    today = datetime.now(ZoneInfo(tz_name)).date()
-    date_from = today - timedelta(days=lookback_days - 1)
-    date_to = today
-    return date_from.strftime("%d.%m.%Y"), date_to.strftime("%d.%m.%Y")
+    digest_lookback_days = int(settings.get("digest_lookback_days", 7))
 
+    now = datetime.now(ZoneInfo(tz_name))
+    cutoff = now - timedelta(days=digest_lookback_days)
 
-def load_current_rows(interim_path: Path) -> list[dict]:
-    if not interim_path.exists():
-        return []
-    return list(iter_tsv_rows(interim_path))
+    return (
+        cutoff.date().strftime("%d.%m.%Y"),
+        now.date().strftime("%d.%m.%Y"),
+        cutoff,
+    )
 
 
 def build_markdown_digest(
     analyses: list[dict],
-    total_found: int,
     period_from: str,
     period_to: str,
 ) -> str:
@@ -46,24 +54,18 @@ def build_markdown_digest(
     lines.append("")
 
     if not analyses:
-        lines.append(
-            "Аналітичні матеріали не сформовані: постанови були знайдені, але Gemini-аналіз не згенеровано."
-            if total_found > 0
-            else "За вказаний період постанов Великої Палати ВС не знайдено."
-        )
-        lines.append("")
-        lines.append(f"- Знайдено постанов у вибірці: **{total_found}**")
-        lines.append(f"- Проаналізовано постанов: **{len(analyses)}**")
-        return "\n".join(lines)
+        lines.append("За цей період нових готових аналізів постанов не сформовано.")
+        return "\n".join(lines) + "\n"
 
-    lines.append(f"За період знайдено **{total_found}** постанов, з них проаналізовано **{len(analyses)}**.")
+    lines.append(f"За період сформовано **{len(analyses)}** нових аналізів повних текстів постанов.")
     lines.append("")
 
     for idx, item in enumerate(analyses, start=1):
         lines.append(f"## {idx}. Справа № {safe_text(item.get('cause_num'))}")
         lines.append("")
         lines.append(f"- **Дата ухвалення:** {format_date_for_display(str(item.get('adjudication_date', '')))}")
-        lines.append(f"- **Дата оприлюднення:** {format_date_for_display(str(item.get('date_publ', '')))}")
+        lines.append(f"- **Дата публікації:** {format_date_for_display(str(item.get('date_publ', '')))}")
+        lines.append(f"- **Проаналізовано:** {safe_text(item.get('analyzed_at'))}")
         lines.append(f"- **Коротко:** {safe_text(item.get('short_summary'))}")
         lines.append(f"- **Ключова позиція:** {safe_text(item.get('key_position'))}")
         lines.append(f"- **Практичне значення:** {safe_text(item.get('practical_value'))}")
@@ -82,7 +84,6 @@ def build_markdown_digest(
 
 def build_telegram_post(
     analyses: list[dict],
-    total_found: int,
     period_from: str,
     period_to: str,
 ) -> str:
@@ -91,16 +92,10 @@ def build_telegram_post(
     lines.append("")
 
     if not analyses:
-        if total_found > 0:
-            lines.append(
-                "За цей період постанови знайдено, але аналітичні блоки ще не сформовані через технічну помилку під час Gemini-аналізу."
-            )
-            lines.append(f"Кількість знайдених постанов: {total_found}.")
-        else:
-            lines.append("За цей період нових постанов Великої Палати ВС не знайдено.")
+        lines.append("За цей період нових готових аналізів повних текстів постанов не сформовано.")
         return "\n".join(lines).strip() + "\n"
 
-    lines.append(f"За тиждень оприлюднено {total_found} постанов Великої Палати Верховного Суду.")
+    lines.append(f"За тиждень підготовлено {len(analyses)} нових аналізів повних текстів постанов Великої Палати Верховного Суду.")
     lines.append("")
 
     for idx, item in enumerate(analyses, start=1):
@@ -118,49 +113,44 @@ def main() -> None:
     setup_logging()
     settings = load_settings()
 
-    interim_path = ROOT_DIR / "data" / "interim" / "vp_last7.csv"
     analysis_dir = ROOT_DIR / "data" / "processed" / "analysis"
     output_dir = ROOT_DIR / "outputs" / "digest"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    rows = load_current_rows(interim_path)
-    total_found = len(rows)
+    period_from, period_to, cutoff = build_period(settings)
 
     analyses: list[dict] = []
-    for row in rows:
-        doc_id = str(row.get("doc_id", "")).strip()
-        if not doc_id:
-            continue
 
-        analysis_path = analysis_dir / f"{doc_id}.json"
-        if not analysis_path.exists():
-            continue
+    if analysis_dir.exists():
+        for path in analysis_dir.glob("*.json"):
+            item = load_json(path, default={})
+            if not item:
+                continue
 
-        item = load_json(analysis_path, default={})
-        if not item:
-            continue
+            analyzed_at = parse_datetime_safe(str(item.get("analyzed_at", "")))
+            if not analyzed_at:
+                continue
+            if analyzed_at < cutoff:
+                continue
 
-        analyses.append(item)
+            analyses.append(item)
 
     analyses.sort(
         key=lambda x: (
+            parse_datetime_safe(str(x.get("analyzed_at", ""))) or datetime.min.replace(tzinfo=cutoff.tzinfo),
             parse_date(str(x.get("date_publ", ""))) or datetime.min.date(),
             str(x.get("cause_num", "")),
         ),
         reverse=True,
     )
 
-    period_from, period_to = build_period(settings)
-
     digest_md = build_markdown_digest(
         analyses=analyses,
-        total_found=total_found,
         period_from=period_from,
         period_to=period_to,
     )
     telegram_post = build_telegram_post(
         analyses=analyses,
-        total_found=total_found,
         period_from=period_from,
         period_to=period_to,
     )
@@ -171,8 +161,7 @@ def main() -> None:
     digest_path.write_text(digest_md, encoding="utf-8")
     telegram_path.write_text(telegram_post, encoding="utf-8")
 
-    logging.info("Знайдено постанов у vp_last7.csv: %s", total_found)
-    logging.info("Знайдено JSON-аналізів для дайджесту: %s", len(analyses))
+    logging.info("Знайдено JSON-аналізів за digest window: %s", len(analyses))
     logging.info("Сформовано %s", digest_path)
     logging.info("Сформовано %s", telegram_path)
 
