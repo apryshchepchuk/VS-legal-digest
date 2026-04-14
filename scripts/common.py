@@ -31,12 +31,19 @@ def ensure_parent(path: Path) -> None:
 def parse_date(date_str: str | None) -> datetime.date | None:
     if not date_str:
         return None
+
+    value = str(date_str).strip()
+
     for fmt in ("%Y-%m-%d", "%d.%m.%Y"):
         try:
-            return datetime.strptime(date_str, fmt).date()
+            return datetime.strptime(value, fmt).date()
         except ValueError:
             continue
-    return None
+
+    try:
+        return datetime.fromisoformat(value).date()
+    except ValueError:
+        return None
 
 
 def get_date_range(days: int) -> tuple[datetime.date, datetime.date]:
