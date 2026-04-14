@@ -16,5 +16,8 @@
   "stop_after_consecutive_503": 2,
   "min_chars_any_text": 6000,
   "min_chars_single_full": 12000,
-  "min_growth_ratio_for_later_version": 1.5
+  "min_growth_ratio_for_later_version": 1.5,
+  "telegram_enabled": true,
+  "telegram_chat_id": "@vpvs_digest",
+  "telegram_disable_notification": true
 }
