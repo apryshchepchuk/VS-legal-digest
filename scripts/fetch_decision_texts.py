@@ -16,6 +16,7 @@ def main() -> None:
     output_dir = ROOT_DIR / "data" / "raw" / "docs_rtf"
     output_dir.mkdir(parents=True, exist_ok=True)
     timeout = int(settings.get("request_timeout_seconds", 60))
+    user_agent = settings.get("user_agent", "vp-vs-digest/0.1")
 
     if not input_path.exists():
         raise FileNotFoundError(f"Не знайдено {input_path}. Спершу запустіть extract_vp_postanovy.py")
