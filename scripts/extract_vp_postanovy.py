@@ -25,7 +25,7 @@ def main() -> None:
     settings = load_settings()
 
     source_path = ROOT_DIR / "data" / "raw" / "archives" / "documents.csv"
-    output_path = ROOT_DIR / "data" / "interim" / "vp_last7.csv"
+    output_path = ROOT_DIR / "data" / "interim" / "vp_last30.csv"
 
     if not source_path.exists():
         raise FileNotFoundError(f"Не знайдено {source_path}. Спершу запустіть fetch_dataset.py")
