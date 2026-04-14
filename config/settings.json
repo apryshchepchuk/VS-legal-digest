@@ -4,7 +4,7 @@
   "target_court_code": "9951",
   "target_judgment_code": "2",
   "timezone": "Europe/Kyiv",
-  "gemini_model": "gemini-2.5-flash",
+  "gemini_model": "gemini-2.5-flash-lite",
   "max_docs_per_run": 3,
   "max_api_requests_per_run": 6,
   "gemini_retry_attempts": 2,
