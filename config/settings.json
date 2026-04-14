@@ -1,0 +1,11 @@
+{
+  "dataset_zip_url": "https://court.gov.ua/storage/portal/open_data_files/.../edrsr_data_2026.zip",
+  "lookback_days": 7,
+  "target_court_code": "9951",
+  "target_judgment_code": "2",
+  "timezone": "Europe/Kyiv",
+  "gemini_model": "gemini-2.5-flash",
+  "max_docs_per_run": 30,
+  "request_timeout_seconds": 60,
+  "user_agent": "vp-vs-digest/0.1"
+}

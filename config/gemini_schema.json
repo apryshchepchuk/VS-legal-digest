@@ -1,0 +1,39 @@
+{
+  "type": "object",
+  "required": [
+    "short_summary",
+    "key_position",
+    "practical_value",
+    "public_value",
+    "topic_tags",
+    "telegram_line",
+    "needs_review"
+  ],
+  "properties": {
+    "short_summary": {
+      "type": "string"
+    },
+    "key_position": {
+      "type": "string"
+    },
+    "practical_value": {
+      "type": "string"
+    },
+    "public_value": {
+      "type": "string"
+    },
+    "topic_tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "telegram_line": {
+      "type": "string"
+    },
+    "needs_review": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": true
+}
