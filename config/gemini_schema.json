@@ -37,7 +37,7 @@
       "items": {
         "type": "string",
         "minLength": 2,
-        "maxLength": 40
+        "maxLength": 100
       }
     },
     "telegram_line": {
