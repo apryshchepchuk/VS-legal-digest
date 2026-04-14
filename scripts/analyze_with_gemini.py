@@ -14,19 +14,23 @@ from common import ROOT_DIR, iter_tsv_rows, load_json, load_settings, save_json,
 
 PROMPT_TEMPLATE = """Проаналізуй повний текст постанови Великої Палати Верховного Суду України.
 
-Поверни лише валідний JSON без пояснень, markdown і зайвого тексту.
+Поверни результат виключно як один валідний JSON-об’єкт.
+Не додавай markdown.
+Не додавай пояснення.
+Не додавай ```json.
+Не додавай жодного тексту до або після JSON.
 Не вигадуй фактів. Не виходь за межі тексту постанови.
 Аналіз має бути завершеним і спиратися на повний текст постанови.
 Пиши стисло, чітко, українською мовою.
 
-Вимоги до полів:
+JSON має містити поля:
 - short_summary: 2-4 короткі речення простою мовою, до 400 символів
 - key_position: одна головна правова позиція, до 300 символів
 - practical_value: чим це важливо для правозастосовної практики, до 300 символів
 - public_value: чи має це суспільне значення; якщо ні — прямо зазнач, до 220 символів
-- topic_tags: від 2 до 5 коротких тегів
+- topic_tags: масив із 2-5 коротких тегів
 - telegram_line: короткий блок для тижневого Telegram-дайджесту, до 700 символів
-- needs_review: true, якщо текст неповний, нечіткий або висновок важко встановити
+- needs_review: true або false
 
 Текст постанови:
 """
@@ -92,8 +96,6 @@ def call_gemini_once(
                 top_p=0.8,
                 top_k=20,
                 max_output_tokens=900,
-                response_mime_type="application/json",
-                response_json_schema=schema,
             ),
         )
     except Exception as exc:
@@ -102,6 +104,12 @@ def call_gemini_once(
     response_text = (response.text or "").strip()
     if not response_text:
         raise IncompleteJsonError("INCOMPLETE_JSON: порожня відповідь")
+
+    # Іноді модель може обгорнути JSON у ```json ... ```
+    if response_text.startswith("```"):
+        response_text = response_text.strip("`").strip()
+        if response_text.lower().startswith("json"):
+            response_text = response_text[4:].strip()
 
     try:
         parsed = json.loads(response_text)
