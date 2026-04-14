@@ -4,6 +4,8 @@ import json
 import logging
 import os
 import time
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from google import genai
 from google.genai import types
@@ -105,7 +107,6 @@ def call_gemini_once(
     if not response_text:
         raise IncompleteJsonError("INCOMPLETE_JSON: порожня відповідь")
 
-    # Іноді модель може обгорнути JSON у ```json ... ```
     if response_text.startswith("```"):
         response_text = response_text.strip("`").strip()
         if response_text.lower().startswith("json"):
@@ -169,11 +170,12 @@ def main() -> None:
     if not api_key:
         raise EnvironmentError("Не задано GEMINI_API_KEY")
 
-    model = settings.get("gemini_model", "gemini-2.5-flash")
+    tz_name = settings.get("timezone", "Europe/Kyiv")
+    model = settings.get("gemini_model", "gemini-2.5-flash-lite")
     retry_attempts = max(1, int(settings.get("gemini_retry_attempts", 2)))
-    max_docs_per_run = max(1, int(settings.get("max_docs_per_run", 3)))
-    max_api_requests_per_run = max(1, int(settings.get("max_api_requests_per_run", 6)))
-    sleep_after_each_request_seconds = float(settings.get("sleep_after_each_request_seconds", 16))
+    max_docs_per_run = max(1, int(settings.get("max_docs_per_run", 4)))
+    max_api_requests_per_run = max(1, int(settings.get("max_api_requests_per_run", 8)))
+    sleep_after_each_request_seconds = float(settings.get("sleep_after_each_request_seconds", 7))
     stop_after_first_429 = bool(settings.get("stop_after_first_429", True))
     stop_after_consecutive_503 = int(settings.get("stop_after_consecutive_503", 2))
 
@@ -213,7 +215,7 @@ def main() -> None:
 
     rows_to_process = pending_rows[:max_docs_per_run]
 
-    logging.info("Усього записів у vp_last7.csv: %s", len(rows))
+    logging.info("Усього записів у vp_selected_for_analysis.csv: %s", len(rows))
     logging.info("Нових записів для аналізу: %s", len(pending_rows))
     logging.info("Буде оброблено в цьому запуску: %s", len(rows_to_process))
 
@@ -223,6 +225,8 @@ def main() -> None:
     consecutive_503_count = 0
     stop_run = False
     stop_reason = ""
+
+    analyzed_at = datetime.now(ZoneInfo(tz_name)).isoformat()
 
     for index, row in enumerate(rows_to_process, start=1):
         doc_id = str(row.get("doc_id", "")).strip()
@@ -278,6 +282,9 @@ def main() -> None:
                     "adjudication_date": row.get("adjudication_date", ""),
                     "date_publ": row.get("date_publ", ""),
                     "doc_url": row.get("doc_url", ""),
+                    "char_count": row.get("char_count", ""),
+                    "selection_reason": row.get("selection_reason", ""),
+                    "analyzed_at": analyzed_at,
                     **result,
                 }
 
@@ -301,7 +308,6 @@ def main() -> None:
                 append_unique(failed_doc_ids, doc_id)
                 stop_reason = f"Отримано 429/Rate Limit від Gemini: {exc}"
                 logging.error(stop_reason)
-
                 if stop_after_first_429:
                     stop_run = True
                 break
@@ -319,10 +325,7 @@ def main() -> None:
                 if attempt >= retry_attempts:
                     append_unique(failed_doc_ids, doc_id)
 
-                if (
-                    stop_after_consecutive_503 > 0
-                    and consecutive_503_count >= stop_after_consecutive_503
-                ):
+                if stop_after_consecutive_503 > 0 and consecutive_503_count >= stop_after_consecutive_503:
                     stop_reason = (
                         f"Зупинка після {consecutive_503_count} поспіль помилок 503/temporary unavailable"
                     )
@@ -351,10 +354,7 @@ def main() -> None:
 
             finally:
                 if sleep_after_each_request_seconds > 0:
-                    logging.info(
-                        "Пауза %.1f сек після API-виклику",
-                        sleep_after_each_request_seconds,
-                    )
+                    logging.info("Пауза %.1f сек після API-виклику", sleep_after_each_request_seconds)
                     time.sleep(sleep_after_each_request_seconds)
 
         if stop_run:
