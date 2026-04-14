@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from common import ROOT_DIR, load_json, load_settings, setup_logging
+from common import ROOT_DIR, load_json, load_settings, parse_date, setup_logging
 
 
 def safe_text(value: object, fallback: str = "—") -> str:
@@ -33,6 +32,18 @@ def format_iso_datetime(value: str, timezone_name: str) -> str:
     return dt.strftime("%d.%m.%Y %H:%M")
 
 
+def format_date_only(value: str) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+
+    date_obj = parse_date(raw)
+    if not date_obj:
+        return raw
+
+    return date_obj.strftime("%d.%m.%Y")
+
+
 def build_post(items: list[dict], run_at: str, timezone_name: str) -> str:
     lines: list[str] = []
 
@@ -50,8 +61,8 @@ def build_post(items: list[dict], run_at: str, timezone_name: str) -> str:
         cause_num = safe_text(item.get("cause_num"))
         telegram_line = safe_text(item.get("telegram_line"))
         doc_url = safe_text(item.get("doc_url"), "")
-        date_publ = safe_text(item.get("date_publ"), "")
-        adjudication_date = safe_text(item.get("adjudication_date"), "")
+        adjudication_date = format_date_only(str(item.get("adjudication_date", "")))
+        date_publ = format_date_only(str(item.get("date_publ", "")))
 
         lines.append(f"{idx}) Справа № {cause_num}")
 
