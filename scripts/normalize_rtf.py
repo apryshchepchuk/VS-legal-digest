@@ -33,6 +33,10 @@ def main() -> None:
     out_dir = ROOT_DIR / "data" / "processed" / "text"
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    if not source_dir.exists():
+    logging.info("Папка %s відсутня, конвертувати нічого", source_dir)
+    return
+
     files = sorted([p for p in source_dir.iterdir() if p.is_file() and p.suffix.lower() in {".rtf", ".html"}])
     converted = 0
 
