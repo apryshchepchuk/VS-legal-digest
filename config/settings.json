@@ -1,6 +1,7 @@
 {
   "dataset_zip_url": "https://dsa.court.gov.ua//storage/portal/open_data_files/91509/7636/b1bd0121ce12c0fa3c4a4c046a60dd19.zip",
-  "lookback_days": 7,
+  "selection_lookback_days": 30,
+  "digest_lookback_days": 7,
   "target_court_code": "9951",
   "target_judgment_code": "2",
   "timezone": "Europe/Kyiv",
@@ -15,6 +16,5 @@
   "stop_after_consecutive_503": 2,
   "min_chars_any_text": 6000,
   "min_chars_single_full": 12000,
-  "min_growth_ratio_for_later_version": 1.5,
-  "selection_lookback_days": 30
+  "min_growth_ratio_for_later_version": 1.5
 }
