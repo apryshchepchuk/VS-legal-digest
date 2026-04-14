@@ -1,0 +1,85 @@
+name: Daily Collect and Analyze
+
+on:
+  schedule:
+    - cron: "15 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vp-vs-digest-daily
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    env:
+      PYTHONUNBUFFERED: "1"
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Verify Gemini API key
+        shell: bash
+        run: |
+          if [ -z "${GEMINI_API_KEY}" ]; then
+            echo "GEMINI_API_KEY is not set"
+            exit 1
+          fi
+          echo "GEMINI_API_KEY detected"
+
+      - name: Run daily pipeline
+        run: |
+          python scripts/fetch_dataset.py
+          python scripts/extract_vp_postanovy.py
+          python scripts/fetch_decision_texts.py
+          python scripts/normalize_rtf.py
+          python scripts/analyze_with_gemini.py
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vp-vs-digest-daily-${{ github.run_id }}
+          path: |
+            data/interim/
+            data/processed/analysis/
+            data/state/
+          if-no-files-found: warn
+
+      - name: Commit analysis results
+        if: always()
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add data/processed/analysis/*.json || true
+          git add data/state/*.json || true
+          git add data/interim/vp_last7.csv || true
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+
+          git commit -m "Daily VP digest update [skip ci]"
+          git push
