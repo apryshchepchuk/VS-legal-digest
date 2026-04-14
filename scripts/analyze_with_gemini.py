@@ -5,64 +5,92 @@ import logging
 import os
 from pathlib import Path
 
-import requests
-from jsonschema import validate, ValidationError
+from google import genai
+from google.genai import types
+from jsonschema import ValidationError, validate
 
 from common import ROOT_DIR, iter_tsv_rows, load_json, load_settings, save_json, setup_logging
 
 
-PROMPT_TEMPLATE = """Проаналізуй текст постанови Великої Палати Верховного Суду України.
+PROMPT_TEMPLATE = """Проаналізуй повний текст постанови Великої Палати Верховного Суду України.
+
 Поверни лише валідний JSON без пояснень, markdown і зайвого тексту.
-Не вигадуй фактів. Якщо чогось немає в тексті, прямо зазнач це.
-Пиши стисло, українською мовою.
+Не вигадуй фактів. Не виходь за межі тексту постанови.
+Аналіз має бути завершеним і спиратися на повний текст постанови.
+Пиши стисло, чітко, українською мовою.
 
-Обмеження:
-- short_summary: до 400 символів
-- key_position: до 300 символів
-- practical_value: до 300 символів
-- public_value: до 220 символів
-- topic_tags: 2-5 коротких тегів
-- telegram_line: до 700 символів
+Вимоги до полів:
+- short_summary: 2-4 короткі речення простою мовою, до 400 символів
+- key_position: одна головна правова позиція, до 300 символів
+- practical_value: чим це важливо для правозастосовної практики, до 300 символів
+- public_value: чи має це суспільне значення; якщо ні — прямо зазнач, до 220 символів
+- topic_tags: від 2 до 5 коротких тегів
+- telegram_line: короткий блок для тижневого Telegram-дайджесту, до 700 символів
 - needs_review: true, якщо текст неповний, нечіткий або висновок важко встановити
-
-Поля JSON:
-short_summary
-key_position
-practical_value
-public_value
-topic_tags
-telegram_line
-needs_review
 
 Текст постанови:
 """
 
 
-def call_gemini(api_key: str, model: str, text: str, timeout: int) -> dict:
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
-    payload = {
-        "contents": [
-            {
-                "parts": [
-                    {"text": PROMPT_TEMPLATE + "\n\n" + text}
-                ]
-            }
-        ],
-        "generationConfig": {
-            "temperature": 0.2,
-            "responseMimeType": "application/json"
-        }
-    }
-    response = requests.post(url, json=payload, timeout=timeout)
-    response.raise_for_status()
-    data = response.json()
+def build_prompt(text: str) -> str:
+    return f"{PROMPT_TEMPLATE}\n\n{text}"
+
+
+def call_gemini(
+    client: genai.Client,
+    model: str,
+    prompt_text: str,
+    schema: dict,
+) -> dict:
+    response = client.models.generate_content(
+        model=model,
+        contents=prompt_text,
+        config=types.GenerateContentConfig(
+            temperature=0.1,
+            top_p=0.8,
+            top_k=20,
+            max_output_tokens=2048,
+            response_mime_type="application/json",
+            response_json_schema=schema,
+        ),
+    )
+
+    response_text = (response.text or "").strip()
+    if not response_text:
+        raise RuntimeError("Gemini повернув порожню відповідь")
 
     try:
-        text_payload = data["candidates"][0]["content"]["parts"][0]["text"]
-    except (KeyError, IndexError) as exc:
-        raise RuntimeError(f"Неочікувана відповідь Gemini: {data}") from exc
+        parsed = json.loads(response_text)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Gemini повернув невалідний JSON: {response_text[:1000]}") from exc
 
-    return json.loads(text_payload)
+    return parsed
+
+
+def post_validate_result(result: dict) -> dict:
+    required_text_fields = [
+        "short_summary",
+        "key_position",
+        "practical_value",
+        "public_value",
+        "telegram_line",
+    ]
+
+    needs_review = bool(result.get("needs_review", False))
+
+    for field in required_text_fields:
+        value = str(result.get(field, "")).strip()
+        if not value:
+            needs_review = True
+            result[field] = value
+
+    tags = result.get("topic_tags", [])
+    if not isinstance(tags, list) or len(tags) < 2:
+        needs_review = True
+        result["topic_tags"] = tags if isinstance(tags, list) else []
+
+    result["needs_review"] = needs_review
+    return result
 
 
 def main() -> None:
@@ -73,8 +101,7 @@ def main() -> None:
     if not api_key:
         raise EnvironmentError("Не задано GEMINI_API_KEY")
 
-    model = settings.get("gemini_model", "gemini-2.5-flash")
-    timeout = int(settings.get("request_timeout_seconds", 60))
+    model = settings.get("gemini_model", "gemini-3.1-flash-lite-preview")
 
     interim_path = ROOT_DIR / "data" / "interim" / "vp_last7.csv"
     text_dir = ROOT_DIR / "data" / "processed" / "text"
@@ -85,14 +112,22 @@ def main() -> None:
     analysis_dir.mkdir(parents=True, exist_ok=True)
 
     schema = load_json(schema_path, default={})
+    if not schema:
+        raise RuntimeError("Не знайдено або порожній config/gemini_schema.json")
+
     state = load_json(state_path, default={"processed_doc_ids": []})
     processed_doc_ids = set(state.get("processed_doc_ids", []))
+
+    if not interim_path.exists():
+        raise FileNotFoundError(f"Не знайдено {interim_path}")
+
+    client = genai.Client(api_key=api_key)
 
     rows = list(iter_tsv_rows(interim_path))
     new_processed = 0
 
     for row in rows:
-        doc_id = row.get("doc_id")
+        doc_id = (row.get("doc_id") or "").strip()
         if not doc_id:
             continue
         if doc_id in processed_doc_ids:
@@ -108,11 +143,22 @@ def main() -> None:
             logging.warning("Порожній текст для doc_id=%s", doc_id)
             continue
 
+        prompt_text = build_prompt(raw_text)
+
         try:
-            result = call_gemini(api_key=api_key, model=model, text=raw_text, timeout=timeout)
+            result = call_gemini(
+                client=client,
+                model=model,
+                prompt_text=prompt_text,
+                schema=schema,
+            )
             validate(instance=result, schema=schema)
-        except (requests.RequestException, json.JSONDecodeError, ValidationError, RuntimeError) as exc:
+            result = post_validate_result(result)
+        except (ValidationError, RuntimeError) as exc:
             logging.exception("Помилка Gemini для doc_id=%s: %s", doc_id, exc)
+            continue
+        except Exception as exc:
+            logging.exception("Неочікувана помилка Gemini для doc_id=%s: %s", doc_id, exc)
             continue
 
         enriched = {
@@ -129,6 +175,7 @@ def main() -> None:
 
         processed_doc_ids.add(doc_id)
         new_processed += 1
+        logging.info("Проаналізовано doc_id=%s", doc_id)
 
     save_json(state_path, {"processed_doc_ids": sorted(processed_doc_ids)})
     logging.info("Нових проаналізованих постанов: %s", new_processed)
