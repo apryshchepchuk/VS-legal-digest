@@ -177,7 +177,7 @@ def main() -> None:
     stop_after_first_429 = bool(settings.get("stop_after_first_429", True))
     stop_after_consecutive_503 = int(settings.get("stop_after_consecutive_503", 2))
 
-    interim_path = ROOT_DIR / "data" / "interim" / "vp_last7.csv"
+    interim_path = ROOT_DIR / "data" / "interim" / "vp_selected_for_analysis.csv"
     text_dir = ROOT_DIR / "data" / "processed" / "text"
     analysis_dir = ROOT_DIR / "data" / "processed" / "analysis"
     schema_path = ROOT_DIR / "config" / "gemini_schema.json"
