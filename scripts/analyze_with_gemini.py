@@ -31,7 +31,7 @@ JSON має містити поля:
 - practical_value: чим це важливо для правозастосовної практики, до 300 символів
 - public_value: чи має це суспільне значення; якщо ні — прямо зазнач, до 220 символів
 - topic_tags: масив із 2-5 коротких тегів
-- telegram_line: короткий блок для тижневого Telegram-дайджесту, до 700 символів
+- telegram_line: короткий блок для щоденного Telegram-дайджесту, до 700 символів
 - needs_review: true або false
 
 Текст постанови:
@@ -87,7 +87,6 @@ def call_gemini_once(
     client: genai.Client,
     model: str,
     prompt_text: str,
-    schema: dict,
 ) -> dict:
     try:
         response = client.models.generate_content(
@@ -187,6 +186,7 @@ def main() -> None:
     last_daily_state_path = ROOT_DIR / "data" / "state" / "last_daily_analyzed_doc_ids.json"
 
     analysis_dir.mkdir(parents=True, exist_ok=True)
+    last_daily_state_path.parent.mkdir(parents=True, exist_ok=True)
 
     schema = load_json(schema_path, default={})
     if not schema:
@@ -222,6 +222,7 @@ def main() -> None:
 
     new_processed = 0
     failed_doc_ids: list[str] = []
+    analyzed_this_run: list[str] = []
     api_requests_made = 0
     consecutive_503_count = 0
     stop_run = False
@@ -272,7 +273,6 @@ def main() -> None:
                     client=client,
                     model=model,
                     prompt_text=prompt_text,
-                    schema=schema,
                 )
                 validate(instance=result, schema=schema)
                 result = post_validate_result(result)
@@ -293,6 +293,7 @@ def main() -> None:
                 save_json(out_path, enriched)
 
                 processed_doc_ids.add(doc_id)
+                analyzed_this_run.append(doc_id)
                 new_processed += 1
                 consecutive_503_count = 0
                 doc_processed = True
@@ -355,7 +356,10 @@ def main() -> None:
 
             finally:
                 if sleep_after_each_request_seconds > 0:
-                    logging.info("Пауза %.1f сек після API-виклику", sleep_after_each_request_seconds)
+                    logging.info(
+                        "Пауза %.1f сек після API-виклику",
+                        sleep_after_each_request_seconds,
+                    )
                     time.sleep(sleep_after_each_request_seconds)
 
         if stop_run:
@@ -365,10 +369,20 @@ def main() -> None:
             logging.info("doc_id=%s не було проаналізовано в цьому запуску", doc_id)
 
     save_json(state_path, {"processed_doc_ids": sorted(processed_doc_ids)})
+    save_json(
+        last_daily_state_path,
+        {
+            "run_at": analyzed_at,
+            "doc_ids": analyzed_this_run,
+        },
+    )
 
     logging.info("API-викликів за запуск: %s", api_requests_made)
     logging.info("Нових проаналізованих постанов: %s", new_processed)
     logging.info("Не вдалося проаналізувати постанов: %s", len(failed_doc_ids))
+
+    if analyzed_this_run:
+        logging.info("doc_id, проаналізовані в цьому запуску: %s", ", ".join(analyzed_this_run))
 
     if failed_doc_ids:
         logging.warning("Список doc_id з помилками: %s", ", ".join(failed_doc_ids))
