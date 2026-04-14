@@ -15,11 +15,12 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
 
     env:
       PYTHONUNBUFFERED: "1"
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
     steps:
       - name: Checkout
@@ -46,6 +47,15 @@ jobs:
           fi
           echo "GEMINI_API_KEY detected"
 
+      - name: Verify Telegram bot token
+        shell: bash
+        run: |
+          if [ -z "${TELEGRAM_BOT_TOKEN}" ]; then
+            echo "TELEGRAM_BOT_TOKEN is not set"
+            exit 1
+          fi
+          echo "TELEGRAM_BOT_TOKEN detected"
+
       - name: Run daily pipeline
         run: |
           python scripts/fetch_dataset.py
@@ -54,6 +64,12 @@ jobs:
           python scripts/normalize_rtf.py
           python scripts/select_full_texts.py
           python scripts/analyze_with_gemini.py
+          python scripts/build_daily_telegram_post.py
+
+      - name: Send to Telegram
+        if: success()
+        run: |
+          python scripts/send_to_telegram.py
 
       - name: Upload artifacts
         if: always()
@@ -64,6 +80,7 @@ jobs:
             data/interim/
             data/processed/analysis/
             data/state/
+            outputs/digest/
           if-no-files-found: warn
 
       - name: Commit analysis results
@@ -75,7 +92,8 @@ jobs:
 
           git add data/processed/analysis/*.json || true
           git add data/state/*.json || true
-          git add data/interim/vp_last7.csv || true
+          git add data/interim/*.csv || true
+          git add outputs/digest/daily_telegram_post.txt || true
 
           if git diff --cached --quiet; then
             echo "No changes to commit"
