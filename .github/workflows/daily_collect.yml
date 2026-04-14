@@ -52,6 +52,7 @@ jobs:
           python scripts/extract_vp_postanovy.py
           python scripts/fetch_decision_texts.py
           python scripts/normalize_rtf.py
+          python scripts/select_full_texts.py
           python scripts/analyze_with_gemini.py
 
       - name: Upload artifacts
