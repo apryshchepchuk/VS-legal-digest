@@ -12,18 +12,27 @@ from common import ROOT_DIR, iter_tsv_rows, load_json, load_settings, save_json,
 
 
 PROMPT_TEMPLATE = """Проаналізуй текст постанови Великої Палати Верховного Суду України.
-Поверни результат виключно у форматі JSON.
-Не вигадуй фактів і не виходь за межі тексту постанови.
-Пиши стисло, ясно, українською мовою.
+Поверни лише валідний JSON без пояснень, markdown і зайвого тексту.
+Не вигадуй фактів. Якщо чогось немає в тексті, прямо зазнач це.
+Пиши стисло, українською мовою.
 
-Заповни поля:
-- short_summary: 2-4 короткі речення простою мовою
-- key_position: одна головна правова позиція
-- practical_value: чим це важливо для правозастосовної практики
-- public_value: чи має це суспільне значення; якщо ні — прямо зазнач
-- topic_tags: від 2 до 5 коротких тегів
-- telegram_line: короткий блок для тижневого Telegram-дайджесту
-- needs_review: true або false
+Обмеження:
+- short_summary: до 400 символів
+- key_position: до 300 символів
+- practical_value: до 300 символів
+- public_value: до 220 символів
+- topic_tags: 2-5 коротких тегів
+- telegram_line: до 700 символів
+- needs_review: true, якщо текст неповний, нечіткий або висновок важко встановити
+
+Поля JSON:
+short_summary
+key_position
+practical_value
+public_value
+topic_tags
+telegram_line
+needs_review
 
 Текст постанови:
 """
