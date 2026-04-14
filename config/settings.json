@@ -8,4 +8,7 @@
   "max_docs_per_run": 30,
   "request_timeout_seconds": 90,
   "user_agent": "vp-vs-digest/0.1"
+  "gemini_retry_attempts": 5,
+  "sleep_between_docs_seconds": 2,
+  "request_timeout_seconds": 90
 }
