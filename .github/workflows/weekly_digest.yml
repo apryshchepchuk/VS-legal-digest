@@ -15,7 +15,7 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
 
     env:
       PYTHONUNBUFFERED: "1"
@@ -34,10 +34,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Build weekly digest from existing analyses
+      - name: Build weekly digest
         run: |
-          python scripts/fetch_dataset.py
-          python scripts/extract_vp_postanovy.py
           python scripts/build_weekly_digest.py
 
       - name: Upload outputs
@@ -47,6 +45,4 @@ jobs:
           name: vp-vs-digest-weekly-${{ github.run_id }}
           path: |
             outputs/digest/
-            data/interim/
-            data/processed/analysis/
           if-no-files-found: warn
