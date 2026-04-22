@@ -206,7 +206,7 @@ def main() -> None:
     write_tsv(selected_path, selected_rows, fieldnames)
     write_tsv(weekly_path, weekly_rows, fieldnames)
 
-    logging.info("Усього записів у vp_last30.csv: %s", len(rows))
+    logging.info("Усього записів у vp_candidates.csv: %s", len(rows))
     logging.info("Усього груп cause_num+adjudication_date: %s", len(groups))
     logging.info("Відібрано записів для analysis pool: %s", len(selected_rows))
     logging.info("Відібрано записів для last7/digest: %s", len(weekly_rows))
