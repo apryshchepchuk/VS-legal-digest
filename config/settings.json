@@ -1,6 +1,7 @@
 {
   "dataset_passport_url": "https://dsa.court.gov.ua/open_data_json.php?json=7636",
   "dataset_zip_name": "edrsr_data_2026.zip",
+  "dataset_zip_url": "https://court.gov.ua/storage/portal/open_data_files/91509/7636/18823737db24721b0f45ecedf4d6144a.zip",
   "selection_lookback_days": 60,
   "digest_lookback_days": 7,
   "target_court_code": "9951",
