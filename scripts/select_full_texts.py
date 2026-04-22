@@ -106,7 +106,7 @@ def main() -> None:
         settings.get("min_growth_ratio_for_later_version", 1.5)
     )
 
-    input_path = ROOT_DIR / "data" / "interim" / "vp_last30.csv"
+    input_path = ROOT_DIR / "data" / "interim" / "vp_candidates.csv"
     text_dir = ROOT_DIR / "data" / "processed" / "text"
 
     selected_path = ROOT_DIR / "data" / "interim" / "vp_selected_for_analysis.csv"
