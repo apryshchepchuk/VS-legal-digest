@@ -12,7 +12,7 @@ def main() -> None:
     setup_logging()
     settings = load_settings()
 
-    input_path = ROOT_DIR / "data" / "interim" / "vp_last30.csv"
+    input_path = ROOT_DIR / "data" / "interim" / "vp_candidates.csv"
     output_dir = ROOT_DIR / "data" / "raw" / "docs_rtf"
     output_dir.mkdir(parents=True, exist_ok=True)
     timeout = int(settings.get("request_timeout_seconds", 60))
