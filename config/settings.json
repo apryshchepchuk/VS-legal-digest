@@ -6,6 +6,8 @@
   "digest_lookback_days": 7,
   "target_court_code": "9951",
   "target_judgment_code": "2",
+  "exclude_vp_appellate_admin_cases": true,
+  "vp_appellate_admin_prefixes": ["990/", "9901/", "800/", "990SCGC/"],
   "timezone": "Europe/Kyiv",
   "gemini_model": "gemini-2.5-flash-lite",
   "max_docs_per_run": 4,
