@@ -19,7 +19,7 @@ def main() -> None:
     target_judgment_code = str(settings.get("target_judgment_code", "2"))
 
     input_path = ROOT_DIR / "data" / "raw" / "archives" / "documents.csv"
-    output_path = ROOT_DIR / "data" / "interim" / "vp_last30.csv"
+    output_path = ROOT_DIR / "data" / "interim" / "vp_candidates.csv"
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     if not input_path.exists():
