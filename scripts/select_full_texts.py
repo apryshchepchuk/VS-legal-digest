@@ -23,7 +23,12 @@ def write_tsv(path: Path, rows: list[dict], fieldnames: list[str]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
     with path.open("w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter="\t")
+        writer = csv.DictWriter(
+            f,
+            fieldnames=fieldnames,
+            delimiter="\t",
+            extrasaction="ignore",
+        )
         writer.writeheader()
         for row in rows:
             writer.writerow(row)
@@ -98,7 +103,7 @@ def main() -> None:
     settings = load_settings()
 
     tz_name = settings.get("timezone", "Europe/Kyiv")
-    weekly_lookback_days = int(settings.get("lookback_days", 7))
+    digest_lookback_days = int(settings.get("digest_lookback_days", 7))
 
     min_chars_any_text = int(settings.get("min_chars_any_text", 6000))
     min_chars_single_full = int(settings.get("min_chars_single_full", 12000))
@@ -112,14 +117,31 @@ def main() -> None:
     selected_path = ROOT_DIR / "data" / "interim" / "vp_selected_for_analysis.csv"
     weekly_path = ROOT_DIR / "data" / "interim" / "vp_last7.csv"
 
+    fieldnames = [
+        "doc_id",
+        "cause_num",
+        "adjudication_date",
+        "receipt_date",
+        "date_publ",
+        "judge",
+        "doc_url",
+        "court_code",
+        "judgment_code",
+        "justice_kind",
+        "category_code",
+        "status",
+        "char_count",
+        "selection_reason",
+    ]
+
     if not input_path.exists():
         raise FileNotFoundError(f"Не знайдено {input_path}")
 
     rows = read_tsv(input_path)
     if not rows:
         logging.info("У %s немає записів", input_path)
-        write_tsv(selected_path, [], [])
-        write_tsv(weekly_path, [], [])
+        write_tsv(selected_path, [], fieldnames)
+        write_tsv(weekly_path, [], fieldnames)
         return
 
     # Додаємо char_count для кожного doc_id
@@ -142,23 +164,22 @@ def main() -> None:
     selected_rows: list[dict] = []
     skipped_groups = 0
 
-    for group_key, group_rows in groups.items():
+    for _group_key, group_rows in groups.items():
         sorted_rows = sort_group_rows(group_rows)
 
         if len(sorted_rows) == 1:
-            only_row = sorted_rows[0]
+            only_row = dict(sorted_rows[0])
             if should_select_single(
                 only_row,
                 min_chars_single_full=min_chars_single_full,
             ):
-                only_row = dict(only_row)
                 only_row["selection_reason"] = "single_record_large_text"
                 selected_rows.append(only_row)
             else:
                 skipped_groups += 1
             continue
 
-        latest_row = sorted_rows[0]
+        latest_row = dict(sorted_rows[0])
         previous_rows = sorted_rows[1:]
 
         if should_select_latest_from_group(
@@ -168,15 +189,14 @@ def main() -> None:
             min_chars_single_full=min_chars_single_full,
             min_growth_ratio_for_later_version=min_growth_ratio_for_later_version,
         ):
-            latest_row = dict(latest_row)
             latest_row["selection_reason"] = "latest_publication_and_longer_text"
             selected_rows.append(latest_row)
         else:
             skipped_groups += 1
 
-    # Відбираємо тільки ті selected_rows, у яких date_publ входить у останні 7 днів
+    # Відбираємо тільки ті selected_rows, у яких date_publ входить у останні digest_lookback_days днів
     today = datetime.now(ZoneInfo(tz_name)).date()
-    weekly_cutoff = today - timedelta(days=weekly_lookback_days - 1)
+    weekly_cutoff = today - timedelta(days=digest_lookback_days - 1)
 
     weekly_rows: list[dict] = []
     for row in selected_rows:
@@ -187,21 +207,6 @@ def main() -> None:
     # Сортування для стабільного виводу
     selected_rows = sort_group_rows(selected_rows)
     weekly_rows = sort_group_rows(weekly_rows)
-
-    # Поля виводу
-    fieldnames = [
-        "doc_id",
-        "cause_num",
-        "adjudication_date",
-        "receipt_date",
-        "date_publ",
-        "judge",
-        "doc_url",
-        "court_code",
-        "judgment_code",
-        "char_count",
-        "selection_reason",
-    ]
 
     write_tsv(selected_path, selected_rows, fieldnames)
     write_tsv(weekly_path, weekly_rows, fieldnames)
