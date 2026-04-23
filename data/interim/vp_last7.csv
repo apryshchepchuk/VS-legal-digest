@@ -1,9 +1,1 @@
-doc_id	cause_num	adjudication_date	receipt_date	date_publ	judge	doc_url	court_code	judgment_code	char_count	selection_reason
-135804914	990/592/25	2026-04-16 00:00:00+03	2026-04-20 00:00:00+03	2026-04-21 00:00:00+03	Губська Олена Анатоліївна	http://od.reyestr.court.gov.ua/files/67/b25675121952b0be4ce698c15d1fa5fc.rtf	9951	2	28812	single_record_large_text
-135804910	990/16/26	2026-04-16 00:00:00+03	2026-04-20 00:00:00+03	2026-04-21 00:00:00+03	Губська Олена Анатоліївна	http://od.reyestr.court.gov.ua/files/67/c66812bd33e843c4577413dae75c4ed2.rtf	9951	2	46187	single_record_large_text
-135804899	990/490/25	2026-04-16 00:00:00+03	2026-04-20 00:00:00+03	2026-04-21 00:00:00+03	Стрелець Тетяна Геннадіївна	http://od.reyestr.court.gov.ua/files/67/ec477358afe2a0a375d3a0aa17265396.rtf	9951	2	44268	single_record_large_text
-135804853	990SСGС/41/25	2026-04-02 00:00:00+03	2026-04-20 00:00:00+03	2026-04-21 00:00:00+03	Губська Олена Анатоліївна	http://od.reyestr.court.gov.ua/files/67/5db125fa8c67c8499ae7c679b5dd2c8b.rtf	9951	2	66847	latest_publication_and_longer_text
-135804851	990/305/25	2026-04-02 00:00:00+03	2026-04-20 00:00:00+03	2026-04-21 00:00:00+03	Гімон Микола Михайлович	http://od.reyestr.court.gov.ua/files/67/501b5971eb46425553bcc7c6af503eb2.rtf	9951	2	73149	latest_publication_and_longer_text
-135804847	990/219/25	2026-03-26 00:00:00+02	2026-04-20 00:00:00+03	2026-04-21 00:00:00+03	Гімон Микола Михайлович	http://od.reyestr.court.gov.ua/files/67/8edfe4f7198d31b1b75c112b0fbb43c8.rtf	9951	2	72581	single_record_large_text
-135804845	990/165/25	2026-04-02 00:00:00+03	2026-04-20 00:00:00+03	2026-04-21 00:00:00+03	Стрелець Тетяна Геннадіївна	http://od.reyestr.court.gov.ua/files/67/9c9f3917542e620106205b049cf056db.rtf	9951	2	73594	latest_publication_and_longer_text
-135804843	990/214/25	2026-04-02 00:00:00+03	2026-04-20 00:00:00+03	2026-04-21 00:00:00+03	Гімон Микола Михайлович	http://od.reyestr.court.gov.ua/files/67/ce6fe57e9cfc78f6538e758999f2ead8.rtf	9951	2	64153	single_record_large_text
+doc_id	cause_num	adjudication_date	receipt_date	date_publ	judge	doc_url	court_code	judgment_code	justice_kind	category_code	status	char_count	selection_reason
