@@ -15,7 +15,7 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
 
     env:
       PYTHONUNBUFFERED: "1"
@@ -59,10 +59,7 @@ jobs:
       - name: Run daily pipeline
         run: |
           python scripts/fetch_dataset.py
-          python scripts/extract_vp_postanovy.py
-          python scripts/fetch_decision_texts.py
-          python scripts/normalize_rtf.py
-          python scripts/select_full_texts.py
+          python scripts/prepare_analysis_pool.py
           python scripts/analyze_with_gemini.py
           python scripts/build_daily_telegram_post.py
 
