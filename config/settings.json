@@ -23,5 +23,8 @@
   "min_growth_ratio_for_later_version": 1.5,
   "telegram_enabled": true,
   "telegram_chat_id": "@vpvs_digest",
-  "telegram_disable_notification": true
+  "telegram_disable_notification": true,
+  "selection_lookback_days": 60,
+  "selection_lookback_days_sequence": [60, 120, 180, 365],
+  "min_pending_docs_to_stop": 1
 }
