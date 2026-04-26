@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import logging
+import os
 from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -80,7 +81,12 @@ def main() -> None:
     settings = load_settings()
 
     tz_name = settings.get("timezone", "Europe/Kyiv")
-    lookback_days = int(settings.get("selection_lookback_days", 60))
+    lookback_days = int(
+        os.getenv(
+            "LOOKBACK_DAYS_OVERRIDE",
+            str(settings.get("selection_lookback_days", 60)),
+        )
+    )
     target_court_code = str(settings.get("target_court_code", "9951"))
     target_judgment_code = str(settings.get("target_judgment_code", "2"))
 
