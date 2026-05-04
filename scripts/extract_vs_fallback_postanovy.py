@@ -10,6 +10,15 @@ from zoneinfo import ZoneInfo
 from common import ROOT_DIR, load_settings, parse_date, setup_logging
 
 
+def read_tsv(path: Path) -> list[dict]:
+    if not path.exists():
+        raise FileNotFoundError(f"Не знайдено {path}")
+
+    with path.open("r", encoding="utf-8", newline="") as f:
+        reader = csv.DictReader(f, delimiter="\t")
+        return list(reader)
+
+
 def normalize_string_list(values: object, default: list[str]) -> list[str]:
     if not isinstance(values, list) or not values:
         return default
@@ -37,6 +46,19 @@ def normalize_category_codes(values: object) -> set[str]:
         item = str(value).strip()
         if item:
             result.add(item)
+
+    return result
+
+
+def build_courts_map(courts_rows: list[dict]) -> dict[str, str]:
+    result: dict[str, str] = {}
+
+    for row in courts_rows:
+        court_code = str(row.get("court_code", "")).strip()
+        court_name = str(row.get("name", "")).strip()
+
+        if court_code:
+            result[court_code] = court_name
 
     return result
 
@@ -70,7 +92,10 @@ def main() -> None:
             "У settings.json не задано vs_extra_category_codes для fallback-підбору постанов ВС"
         )
 
-    input_path = ROOT_DIR / "data" / "raw" / "archives" / "documents.csv"
+    archives_dir = ROOT_DIR / "data" / "raw" / "archives"
+    input_path = archives_dir / "documents.csv"
+    courts_path = archives_dir / "courts.csv"
+
     output_path = ROOT_DIR / "data" / "interim" / "vp_candidates.csv"
     debug_output_path = ROOT_DIR / "data" / "interim" / "vs_fallback_candidates.csv"
 
@@ -78,6 +103,11 @@ def main() -> None:
 
     if not input_path.exists():
         raise FileNotFoundError(f"Не знайдено {input_path}")
+    if not courts_path.exists():
+        raise FileNotFoundError(f"Не знайдено {courts_path}")
+
+    courts_rows = read_tsv(courts_path)
+    courts_map = build_courts_map(courts_rows)
 
     today = datetime.now(ZoneInfo(tz_name)).date()
     cutoff = today - timedelta(days=lookback_days - 1)
@@ -127,6 +157,7 @@ def main() -> None:
                     "judge": str(row.get("judge", "")).strip(),
                     "doc_url": str(row.get("doc_url", "")).strip(),
                     "court_code": court_code,
+                    "court_name": courts_map.get(court_code, ""),
                     "judgment_code": judgment_code,
                     "justice_kind": str(row.get("justice_kind", "")).strip(),
                     "category_code": category_code,
@@ -143,6 +174,7 @@ def main() -> None:
         "judge",
         "doc_url",
         "court_code",
+        "court_name",
         "judgment_code",
         "justice_kind",
         "category_code",
@@ -155,7 +187,6 @@ def main() -> None:
         for row in selected_rows:
             writer.writerow(row)
 
-    # Дублюємо в окремий debug-файл, щоб було видно саме fallback-вибірку
     with debug_output_path.open("w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter="\t")
         writer.writeheader()
