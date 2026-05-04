@@ -343,6 +343,7 @@ def main() -> None:
                     "date_publ": row.get("date_publ", ""),
                     "doc_url": row.get("doc_url", ""),
                     "court_code": row.get("court_code", ""),
+                    "court_name": row.get("court_name", ""),
                     "judgment_code": row.get("judgment_code", ""),
                     "justice_kind": row.get("justice_kind", ""),
                     "category_code": row.get("category_code", ""),
