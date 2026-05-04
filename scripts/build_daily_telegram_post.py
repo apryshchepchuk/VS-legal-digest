@@ -46,7 +46,7 @@ def format_date_only(value: str) -> str:
 
 def get_source_stream_label(source_stream: str) -> str:
     if source_stream == "vs_fallback":
-        return "Верховний Суд (fallback)"
+        return "Верховний Суд"
     return "Велика Палата Верховного Суду"
 
 
@@ -55,7 +55,6 @@ def build_post(
     run_at: str,
     timezone_name: str,
     source_stream: str,
-    source_stream_label: str,
 ) -> str:
     lines: list[str] = []
 
@@ -80,8 +79,10 @@ def build_post(
         lines.append(intro)
         lines.append("")
 
-    lines.append(f"Джерело добірки: {source_stream_label}")
-    lines.append(f"Сьогодні підготовлено {len(items)} нових аналізів.")
+    if source_stream == "vs_fallback":
+        lines.append(f"Сьогодні підготовлено {len(items)} нових аналізів постанов Верховного Суду.")
+    else:
+        lines.append(f"Сьогодні підготовлено {len(items)} нових аналізів.")
     lines.append("")
 
     for idx, item in enumerate(items, start=1):
@@ -139,7 +140,6 @@ def main() -> None:
     doc_ids = state.get("doc_ids", []) or []
     run_at = str(state.get("run_at", "")).strip()
     source_stream = str(state.get("source_stream", "")).strip() or "vp"
-    source_stream_label = str(state.get("source_stream_label", "")).strip() or get_source_stream_label(source_stream)
 
     if not doc_ids:
         logging.info("Немає нових doc_id для Telegram-поста")
@@ -166,16 +166,11 @@ def main() -> None:
         output_path.write_text("", encoding="utf-8")
         return
 
-    # Якщо state не містив stream label, а item уже містить — беремо з першого item
-    if not source_stream_label:
-        source_stream_label = safe_text(items[0].get("source_stream_label"), get_source_stream_label(source_stream))
-
     post_text = build_post(
         items=items,
         run_at=run_at,
         timezone_name=timezone_name,
         source_stream=source_stream,
-        source_stream_label=source_stream_label,
     )
     output_path.write_text(post_text, encoding="utf-8")
 
