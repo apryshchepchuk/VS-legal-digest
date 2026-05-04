@@ -44,16 +44,43 @@ def format_date_only(value: str) -> str:
     return date_obj.strftime("%d.%m.%Y")
 
 
-def build_post(items: list[dict], run_at: str, timezone_name: str) -> str:
+def get_source_stream_label(source_stream: str) -> str:
+    if source_stream == "vs_fallback":
+        return "Верховний Суд (fallback)"
+    return "Велика Палата Верховного Суду"
+
+
+def build_post(
+    items: list[dict],
+    run_at: str,
+    timezone_name: str,
+    source_stream: str,
+    source_stream_label: str,
+) -> str:
     lines: list[str] = []
 
-    title = "Щоденний дайджест постанов Великої Палати ВС"
     run_at_display = format_iso_datetime(run_at, timezone_name)
+
+    if source_stream == "vs_fallback":
+        title = "Щоденний дайджест постанов Верховного Суду"
+        intro = (
+            "Сьогодні нових постанов Великої Палати Верховного Суду не виявлено. "
+            "Нижче — добірка постанов Верховного Суду."
+        )
+    else:
+        title = "Щоденний дайджест постанов Великої Палати ВС"
+        intro = None
 
     lines.append(title)
     if run_at_display:
         lines.append(f"Оновлення: {run_at_display}")
     lines.append("")
+
+    if intro:
+        lines.append(intro)
+        lines.append("")
+
+    lines.append(f"Джерело добірки: {source_stream_label}")
     lines.append(f"Сьогодні підготовлено {len(items)} нових аналізів.")
     lines.append("")
 
@@ -65,6 +92,11 @@ def build_post(items: list[dict], run_at: str, timezone_name: str) -> str:
         date_publ = format_date_only(str(item.get("date_publ", "")))
 
         lines.append(f"{idx}) Справа № {cause_num}")
+
+        if source_stream == "vs_fallback":
+            court_name = safe_text(item.get("court_name"), "")
+            if court_name:
+                lines.append(f"Суд: {court_name}")
 
         if adjudication_date:
             lines.append(f"Дата постанови: {adjudication_date}")
@@ -106,6 +138,8 @@ def main() -> None:
     state = load_json(state_path, default={})
     doc_ids = state.get("doc_ids", []) or []
     run_at = str(state.get("run_at", "")).strip()
+    source_stream = str(state.get("source_stream", "")).strip() or "vp"
+    source_stream_label = str(state.get("source_stream_label", "")).strip() or get_source_stream_label(source_stream)
 
     if not doc_ids:
         logging.info("Немає нових doc_id для Telegram-поста")
@@ -132,11 +166,22 @@ def main() -> None:
         output_path.write_text("", encoding="utf-8")
         return
 
-    post_text = build_post(items=items, run_at=run_at, timezone_name=timezone_name)
+    # Якщо state не містив stream label, а item уже містить — беремо з першого item
+    if not source_stream_label:
+        source_stream_label = safe_text(items[0].get("source_stream_label"), get_source_stream_label(source_stream))
+
+    post_text = build_post(
+        items=items,
+        run_at=run_at,
+        timezone_name=timezone_name,
+        source_stream=source_stream,
+        source_stream_label=source_stream_label,
+    )
     output_path.write_text(post_text, encoding="utf-8")
 
     logging.info("Сформовано %s", output_path)
     logging.info("У пост включено %s нових аналізів", len(items))
+    logging.info("source_stream для Telegram-поста: %s", source_stream)
 
 
 if __name__ == "__main__":
