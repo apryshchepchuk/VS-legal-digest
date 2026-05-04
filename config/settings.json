@@ -2,13 +2,31 @@
   "dataset_passport_url": "https://dsa.court.gov.ua/open_data_json.php?json=7636",
   "dataset_zip_name": "edrsr_data_2026.zip",
   "dataset_zip_url": "https://court.gov.ua/storage/portal/open_data_files/91509/7636/18823737db24721b0f45ecedf4d6144a.zip",
+
   "selection_lookback_days": 60,
+  "selection_lookback_days_sequence": [60, 120, 180, 365],
+  "min_pending_docs_to_stop": 1,
   "digest_lookback_days": 7,
+
   "target_court_code": "9951",
   "target_judgment_code": "2",
+
   "exclude_vp_appellate_admin_cases": true,
   "vp_appellate_admin_prefixes": ["990/", "9901/", "800/", "990SCGC/"],
+
+  "vs_fallback_enabled": true,
+  "vs_fallback_only_if_no_new_vp": true,
+  "vs_fallback_court_codes": ["9911", "9921", "9931"],
+  "vs_fallback_max_docs_per_run": 2,
+  "vs_extra_category_codes": [
+    4027, 11988, 40232, 40233, 40234, 40236, 40237, 12023, 12757, 12884, 12886, 12887, 12888, 5591, 4116, 6016,
+    1064, 40221, 40329, 40337, 40253, 13438, 12842, 12897, 13654, 13827, 40398, 12480, 12481, 12061, 40218, 12839,
+    12062, 40219, 12840, 12160, 12902,
+    1080, 1081, 1082, 1083, 40383, 13428, 13453, 13502
+  ],
+
   "timezone": "Europe/Kyiv",
+
   "gemini_model": "gemini-2.5-flash-lite",
   "max_docs_per_run": 4,
   "max_api_requests_per_run": 8,
@@ -18,13 +36,12 @@
   "user_agent": "vp-vs-digest/0.1",
   "stop_after_first_429": true,
   "stop_after_consecutive_503": 2,
+
   "min_chars_any_text": 6000,
   "min_chars_single_full": 12000,
   "min_growth_ratio_for_later_version": 1.5,
+
   "telegram_enabled": true,
   "telegram_chat_id": "@vpvs_digest",
-  "telegram_disable_notification": true,
-  "selection_lookback_days": 60,
-  "selection_lookback_days_sequence": [60, 120, 180, 365],
-  "min_pending_docs_to_stop": 1
+  "telegram_disable_notification": true
 }
