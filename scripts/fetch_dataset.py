@@ -13,7 +13,7 @@ import requests
 from common import ROOT_DIR, load_settings, setup_logging
 
 
-def download_file(url: str, destination: Path, timeout: int, user_agent: str) -> None:
+def download_file_once(url: str, destination: Path, timeout: int, user_agent: str) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
 
     logging.info("Завантаження: %s", url)
@@ -32,6 +32,45 @@ def download_file(url: str, destination: Path, timeout: int, user_agent: str) ->
                     f.write(chunk)
 
     logging.info("Збережено: %s", destination)
+
+
+def download_file(url: str, destination: Path, timeout: int, user_agent: str) -> None:
+    attempts = 3
+    sleep_seconds = 20.0
+    last_error: Exception | None = None
+
+    for attempt in range(1, attempts + 1):
+        try:
+            logging.info("Спроба завантаження ZIP %s/%s", attempt, attempts)
+            download_file_once(
+                url=url,
+                destination=destination,
+                timeout=timeout,
+                user_agent=user_agent,
+            )
+            return
+        except Exception as exc:
+            last_error = exc
+            logging.warning(
+                "Не вдалося завантажити ZIP на спробі %s/%s: %s",
+                attempt,
+                attempts,
+                exc,
+            )
+
+            # Щоб не залишався битий частково скачаний файл
+            try:
+                if destination.exists():
+                    destination.unlink()
+            except Exception as cleanup_exc:
+                logging.warning("Не вдалося видалити неповний ZIP %s: %s", destination, cleanup_exc)
+
+            if attempt < attempts:
+                logging.info("Пауза %.1f сек перед повтором завантаження ZIP", sleep_seconds)
+                time.sleep(sleep_seconds)
+
+    assert last_error is not None
+    raise last_error
 
 
 def load_passport(passport_url: str, timeout: int, user_agent: str) -> dict[str, Any]:
