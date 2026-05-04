@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import shutil
+import time
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -50,6 +51,39 @@ def load_passport(passport_url: str, timeout: int, user_agent: str) -> dict[str,
         raise RuntimeError(f"Паспорт набору даних не є валідним JSON: {snippet}") from exc
 
     return passport
+
+
+def load_passport_with_retry(
+    passport_url: str,
+    timeout: int,
+    user_agent: str,
+    attempts: int = 3,
+    sleep_seconds: float = 15.0,
+) -> dict[str, Any]:
+    last_error: Exception | None = None
+
+    for attempt in range(1, attempts + 1):
+        try:
+            logging.info("Спроба завантаження паспорта %s/%s", attempt, attempts)
+            return load_passport(
+                passport_url=passport_url,
+                timeout=timeout,
+                user_agent=user_agent,
+            )
+        except Exception as exc:
+            last_error = exc
+            logging.warning(
+                "Не вдалося завантажити паспорт набору даних на спробі %s/%s: %s",
+                attempt,
+                attempts,
+                exc,
+            )
+            if attempt < attempts:
+                logging.info("Пауза %.1f сек перед повтором", sleep_seconds)
+                time.sleep(sleep_seconds)
+
+    assert last_error is not None
+    raise last_error
 
 
 def find_zip_url_from_passport(passport: dict[str, Any], expected_zip_name: str) -> str:
@@ -113,20 +147,37 @@ def resolve_dataset_zip_url(settings: dict[str, Any]) -> tuple[str, dict[str, An
 
     passport_url = str(settings.get("dataset_passport_url", "")).strip()
     expected_zip_name = str(settings.get("dataset_zip_name", "edrsr_data_2026.zip")).strip()
+    fallback_zip_url = str(settings.get("dataset_zip_url", "")).strip()
 
     if passport_url:
-        passport = load_passport(
-            passport_url=passport_url,
-            timeout=timeout,
-            user_agent=user_agent,
-        )
-        zip_url = find_zip_url_from_passport(
-            passport=passport,
-            expected_zip_name=expected_zip_name,
-        )
-        return zip_url, passport
+        try:
+            passport = load_passport_with_retry(
+                passport_url=passport_url,
+                timeout=timeout,
+                user_agent=user_agent,
+                attempts=3,
+                sleep_seconds=15.0,
+            )
+            zip_url = find_zip_url_from_passport(
+                passport=passport,
+                expected_zip_name=expected_zip_name,
+            )
+            return zip_url, passport
+        except Exception as exc:
+            logging.warning(
+                "Не вдалося отримати актуальний ZIP із паспорта набору даних: %s",
+                exc,
+            )
+            if fallback_zip_url:
+                logging.warning(
+                    "Використовую fallback dataset_zip_url із settings.json: %s",
+                    fallback_zip_url,
+                )
+                return fallback_zip_url, None
+            raise RuntimeError(
+                "Паспорт недоступний, а fallback dataset_zip_url не задано"
+            ) from exc
 
-    fallback_zip_url = str(settings.get("dataset_zip_url", "")).strip()
     if fallback_zip_url:
         logging.warning(
             "dataset_passport_url не задано. Використовую fallback dataset_zip_url: %s",
@@ -198,6 +249,8 @@ def main() -> None:
             encoding="utf-8",
         )
         logging.info("Паспорт набору даних збережено: %s", passport_path)
+    else:
+        logging.info("Паспорт набору даних не збережено, бо використано fallback ZIP URL")
 
     resolved_url_path.write_text(dataset_zip_url, encoding="utf-8")
     logging.info("Актуальний URL ZIP збережено: %s", resolved_url_path)
