@@ -14,7 +14,7 @@ from jsonschema import ValidationError, validate
 from common import ROOT_DIR, iter_tsv_rows, load_json, load_settings, save_json, setup_logging
 
 
-PROMPT_TEMPLATE = """Проаналізуй повний текст постанови Великої Палати Верховного Суду України.
+PROMPT_TEMPLATE_VP = """Проаналізуй повний текст постанови Великої Палати Верховного Суду України.
 
 Поверни результат виключно як один валідний JSON-об’єкт.
 Не додавай markdown.
@@ -24,6 +24,30 @@ PROMPT_TEMPLATE = """Проаналізуй повний текст постан
 Не вигадуй фактів. Не виходь за межі тексту постанови.
 Аналіз має бути завершеним і спиратися на повний текст постанови.
 Пиши стисло, чітко, українською мовою.
+
+JSON має містити поля:
+- short_summary: 2-4 короткі речення простою мовою, до 400 символів
+- key_position: одна головна правова позиція, до 300 символів
+- practical_value: чим це важливо для правозастосовної практики, до 300 символів
+- public_value: чи має це суспільне значення; якщо ні — прямо зазнач, до 220 символів
+- topic_tags: масив із 2-5 коротких тегів
+- telegram_line: короткий блок для щоденного Telegram-дайджесту, до 700 символів
+- needs_review: true або false
+
+Текст постанови:
+"""
+
+PROMPT_TEMPLATE_VS = """Проаналізуй повний текст постанови Верховного Суду України.
+
+Поверни результат виключно як один валідний JSON-об’єкт.
+Не додавай markdown.
+Не додавай пояснення.
+Не додавай ```json.
+Не додавай жодного тексту до або після JSON.
+Не вигадуй фактів. Не виходь за межі тексту постанови.
+Аналіз має бути завершеним і спиратися на повний текст постанови.
+Пиши стисло, чітко, українською мовою.
+Орієнтуйся на практичну цінність для in-house legal department фармацевтичної компанії.
 
 JSON має містити поля:
 - short_summary: 2-4 короткі речення простою мовою, до 400 символів
@@ -50,8 +74,16 @@ class IncompleteJsonError(Exception):
     pass
 
 
-def build_prompt(text: str) -> str:
-    return f"{PROMPT_TEMPLATE}\n\n{text}"
+def get_source_stream_label(source_stream: str) -> str:
+    if source_stream == "vs_fallback":
+        return "Верховний Суд (fallback)"
+    return "Велика Палата Верховного Суду"
+
+
+def build_prompt(text: str, source_stream: str) -> str:
+    if source_stream == "vs_fallback":
+        return f"{PROMPT_TEMPLATE_VS}\n\n{text}"
+    return f"{PROMPT_TEMPLATE_VP}\n\n{text}"
 
 
 def classify_model_error(exc: Exception) -> Exception:
@@ -172,11 +204,15 @@ def main() -> None:
     tz_name = settings.get("timezone", "Europe/Kyiv")
     model = settings.get("gemini_model", "gemini-2.5-flash-lite")
     retry_attempts = max(1, int(settings.get("gemini_retry_attempts", 2)))
-    max_docs_per_run = max(1, int(settings.get("max_docs_per_run", 4)))
+    default_max_docs_per_run = max(1, int(settings.get("max_docs_per_run", 4)))
     max_api_requests_per_run = max(1, int(settings.get("max_api_requests_per_run", 8)))
     sleep_after_each_request_seconds = float(settings.get("sleep_after_each_request_seconds", 7))
     stop_after_first_429 = bool(settings.get("stop_after_first_429", True))
     stop_after_consecutive_503 = int(settings.get("stop_after_consecutive_503", 2))
+    vs_fallback_max_docs_per_run = max(
+        1,
+        int(settings.get("vs_fallback_max_docs_per_run", 2)),
+    )
 
     interim_path = ROOT_DIR / "data" / "interim" / "vp_selected_for_analysis.csv"
     text_dir = ROOT_DIR / "data" / "processed" / "text"
@@ -184,6 +220,7 @@ def main() -> None:
     schema_path = ROOT_DIR / "config" / "gemini_schema.json"
     state_path = ROOT_DIR / "data" / "state" / "processed_doc_ids.json"
     last_daily_state_path = ROOT_DIR / "data" / "state" / "last_daily_analyzed_doc_ids.json"
+    pool_state_path = ROOT_DIR / "data" / "state" / "selected_analysis_pool.json"
 
     analysis_dir.mkdir(parents=True, exist_ok=True)
     last_daily_state_path.parent.mkdir(parents=True, exist_ok=True)
@@ -194,6 +231,22 @@ def main() -> None:
 
     state = load_json(state_path, default={"processed_doc_ids": []})
     processed_doc_ids = set(state.get("processed_doc_ids", []))
+
+    pool_state = load_json(
+        pool_state_path,
+        default={
+            "source_stream": "vp",
+            "window_days": settings.get("selection_lookback_days", 60),
+        },
+    )
+    source_stream = str(pool_state.get("source_stream", "vp")).strip() or "vp"
+    source_stream_label = get_source_stream_label(source_stream)
+    selection_window_days = pool_state.get("window_days", settings.get("selection_lookback_days", 60))
+
+    if source_stream == "vs_fallback":
+        max_docs_per_run = vs_fallback_max_docs_per_run
+    else:
+        max_docs_per_run = default_max_docs_per_run
 
     if not interim_path.exists():
         raise FileNotFoundError(f"Не знайдено {interim_path}")
@@ -216,8 +269,12 @@ def main() -> None:
 
     rows_to_process = pending_rows[:max_docs_per_run]
 
+    logging.info("Поточний source_stream: %s", source_stream)
+    logging.info("Поточний source_stream_label: %s", source_stream_label)
+    logging.info("Вікно відбору (window_days): %s", selection_window_days)
     logging.info("Усього записів у vp_selected_for_analysis.csv: %s", len(rows))
     logging.info("Нових записів для аналізу: %s", len(pending_rows))
+    logging.info("Ліміт документів для цього запуску: %s", max_docs_per_run)
     logging.info("Буде оброблено в цьому запуску: %s", len(rows_to_process))
 
     new_processed = 0
@@ -245,7 +302,7 @@ def main() -> None:
             append_unique(failed_doc_ids, doc_id)
             continue
 
-        prompt_text = build_prompt(raw_text)
+        prompt_text = build_prompt(raw_text, source_stream=source_stream)
         doc_processed = False
 
         for attempt in range(1, retry_attempts + 1):
@@ -260,10 +317,11 @@ def main() -> None:
 
             api_requests_made += 1
             logging.info(
-                "API-виклик %s/%s для doc_id=%s, спроба %s/%s",
+                "API-виклик %s/%s для doc_id=%s, stream=%s, спроба %s/%s",
                 api_requests_made,
                 max_api_requests_per_run,
                 doc_id,
+                source_stream,
                 attempt,
                 retry_attempts,
             )
@@ -281,10 +339,20 @@ def main() -> None:
                     "doc_id": doc_id,
                     "cause_num": row.get("cause_num", ""),
                     "adjudication_date": row.get("adjudication_date", ""),
+                    "receipt_date": row.get("receipt_date", ""),
                     "date_publ": row.get("date_publ", ""),
                     "doc_url": row.get("doc_url", ""),
+                    "court_code": row.get("court_code", ""),
+                    "judgment_code": row.get("judgment_code", ""),
+                    "justice_kind": row.get("justice_kind", ""),
+                    "category_code": row.get("category_code", ""),
+                    "status": row.get("status", ""),
                     "char_count": row.get("char_count", ""),
                     "selection_reason": row.get("selection_reason", ""),
+                    "source_stream": source_stream,
+                    "source_stream_label": source_stream_label,
+                    "selection_window_days": selection_window_days,
+                    "analysis_model": model,
                     "analyzed_at": analyzed_at,
                     **result,
                 }
@@ -299,10 +367,11 @@ def main() -> None:
                 doc_processed = True
 
                 logging.info(
-                    "Проаналізовано doc_id=%s (%s/%s)",
+                    "Проаналізовано doc_id=%s (%s/%s) | stream=%s",
                     doc_id,
                     index,
                     len(rows_to_process),
+                    source_stream,
                 )
                 break
 
@@ -317,8 +386,9 @@ def main() -> None:
             except TemporaryUnavailableError as exc:
                 consecutive_503_count += 1
                 logging.warning(
-                    "Тимчасова недоступність Gemini для doc_id=%s, спроба %s/%s. Помилка: %s",
+                    "Тимчасова недоступність Gemini для doc_id=%s, stream=%s, спроба %s/%s. Помилка: %s",
                     doc_id,
+                    source_stream,
                     attempt,
                     retry_attempts,
                     exc,
@@ -339,8 +409,9 @@ def main() -> None:
             except (IncompleteJsonError, ValidationError) as exc:
                 consecutive_503_count = 0
                 logging.warning(
-                    "Невалідна або неповна JSON-відповідь для doc_id=%s, спроба %s/%s. Помилка: %s",
+                    "Невалідна або неповна JSON-відповідь для doc_id=%s, stream=%s, спроба %s/%s. Помилка: %s",
                     doc_id,
+                    source_stream,
                     attempt,
                     retry_attempts,
                     exc,
@@ -374,6 +445,9 @@ def main() -> None:
         {
             "run_at": analyzed_at,
             "doc_ids": analyzed_this_run,
+            "source_stream": source_stream,
+            "source_stream_label": source_stream_label,
+            "selection_window_days": selection_window_days,
         },
     )
 
