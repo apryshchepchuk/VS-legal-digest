@@ -126,6 +126,7 @@ def main() -> None:
         "judge",
         "doc_url",
         "court_code",
+        "court_name",
         "judgment_code",
         "justice_kind",
         "category_code",
@@ -144,7 +145,6 @@ def main() -> None:
         write_tsv(weekly_path, [], fieldnames)
         return
 
-    # Додаємо char_count для кожного doc_id
     enriched_rows: list[dict] = []
     for row in rows:
         doc_id = str(row.get("doc_id", "")).strip()
@@ -155,7 +155,6 @@ def main() -> None:
         enriched["char_count"] = str(char_count)
         enriched_rows.append(enriched)
 
-    # Групуємо за cause_num + adjudication_date
     groups: dict[tuple[str, str], list[dict]] = defaultdict(list)
     for row in enriched_rows:
         group_key = build_group_key(row)
@@ -194,7 +193,6 @@ def main() -> None:
         else:
             skipped_groups += 1
 
-    # Відбираємо тільки ті selected_rows, у яких date_publ входить у останні digest_lookback_days днів
     today = datetime.now(ZoneInfo(tz_name)).date()
     weekly_cutoff = today - timedelta(days=digest_lookback_days - 1)
 
@@ -204,7 +202,6 @@ def main() -> None:
         if date_publ and date_publ >= weekly_cutoff:
             weekly_rows.append(row)
 
-    # Сортування для стабільного виводу
     selected_rows = sort_group_rows(selected_rows)
     weekly_rows = sort_group_rows(weekly_rows)
 
