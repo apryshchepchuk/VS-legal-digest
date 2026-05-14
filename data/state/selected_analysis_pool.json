@@ -1,7 +1,7 @@
 {
   "source_stream": "vp",
   "window_days": 60,
-  "selected_count": 15,
+  "selected_count": 16,
   "pending_new_count": 1,
   "min_pending_docs_to_stop": 1,
   "windows_tried": [
