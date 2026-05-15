@@ -1,9 +1,11 @@
 {
-  "run_at": "2026-05-14T10:24:31.296113+03:00",
+  "run_at": "2026-05-15T10:40:10.654092+03:00",
   "doc_ids": [
-    "136428125"
+    "136427944",
+    "136427857",
+    "136392314"
   ],
-  "source_stream": "vp",
-  "source_stream_label": "Велика Палата Верховного Суду",
+  "source_stream": "vs_fallback",
+  "source_stream_label": "Верховний Суд (fallback)",
   "selection_window_days": 60
 }
