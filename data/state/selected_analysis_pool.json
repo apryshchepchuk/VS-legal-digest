@@ -1,8 +1,8 @@
 {
-  "source_stream": "vs_fallback",
+  "source_stream": "vp",
   "window_days": 60,
-  "selected_count": 120,
-  "pending_new_count": 65,
+  "selected_count": 9,
+  "pending_new_count": 1,
   "min_pending_docs_to_stop": 1,
   "windows_tried": [
     60,
