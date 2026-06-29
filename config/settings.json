@@ -17,7 +17,7 @@
   "vs_fallback_enabled": true,
   "vs_fallback_only_if_no_new_vp": true,
   "vs_fallback_court_codes": ["9911", "9921", "9931"],
-  "vs_fallback_max_docs_per_run": 3,
+  "vs_fallback_max_docs_per_run": 4,
   "vs_extra_category_codes": [
     4027, 11988, 40232, 40233, 40234, 40236, 40237, 12023, 12757, 12884, 12886, 12887, 12888, 5591, 4116, 6016,
     1064, 40221, 40329, 40337, 40253, 13438, 12842, 12897, 13654, 13827, 40398, 12480, 12481, 12061, 40218, 12839,
@@ -29,13 +29,13 @@
 
   "gemini_model": "gemini-2.5-flash-lite",
   "max_docs_per_run": 4,
-  "max_api_requests_per_run": 8,
+  "max_api_requests_per_run": 10,
   "gemini_retry_attempts": 2,
   "sleep_after_each_request_seconds": 7,
   "request_timeout_seconds": 120,
   "user_agent": "vp-vs-digest/0.1",
   "stop_after_first_429": true,
-  "stop_after_consecutive_503": 2,
+  "stop_after_consecutive_503": 0,
 
   "min_chars_any_text": 6000,
   "min_chars_single_full": 12000,
