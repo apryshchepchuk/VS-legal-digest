@@ -14,22 +14,22 @@
     "short_summary": {
       "type": "string",
       "minLength": 40,
-      "maxLength": 600
+      "maxLength": 550
     },
     "key_position": {
       "type": "string",
       "minLength": 20,
-      "maxLength": 500
+      "maxLength": 480
     },
     "practical_value": {
       "type": "string",
       "minLength": 20,
-      "maxLength": 350
+      "maxLength": 340
     },
     "public_value": {
       "type": "string",
       "minLength": 10,
-      "maxLength": 350
+      "maxLength": 340
     },
     "topic_tags": {
       "type": "array",
@@ -44,7 +44,7 @@
     "telegram_line": {
       "type": "string",
       "minLength": 60,
-      "maxLength": 1200
+      "maxLength": 1100
     },
     "needs_review": {
       "type": "boolean"
