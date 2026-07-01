@@ -17,7 +17,7 @@
   "vs_fallback_enabled": true,
   "vs_fallback_only_if_no_new_vp": true,
   "vs_fallback_court_codes": ["9911", "9921", "9931"],
-  "vs_fallback_max_docs_per_run": 5,
+  "vs_fallback_max_docs_per_run": 4,
   "vs_extra_category_codes": [
     4027, 11988, 40232, 40233, 40234, 40236, 40237, 12023, 12757, 12884, 12886, 12887, 12888, 5591, 4116, 6016,
     1064, 40221, 40329, 40337, 40253, 13438, 12842, 12897, 13654, 13827, 40398, 12480, 12481, 12061, 40218, 12839,
