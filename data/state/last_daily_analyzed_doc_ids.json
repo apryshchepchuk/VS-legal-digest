@@ -1,6 +1,8 @@
 {
-  "run_at": "2026-07-04T10:17:16.492192+03:00",
-  "doc_ids": [],
+  "run_at": "2026-07-05T10:39:45.272459+03:00",
+  "doc_ids": [
+    "137886449"
+  ],
   "source_stream": "vp",
   "source_stream_label": "Велика Палата Верховного Суду",
   "selection_window_days": 60
