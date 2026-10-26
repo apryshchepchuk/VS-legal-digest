@@ -1,6 +1,8 @@
 {
-  "run_at": "2026-10-25T11:19:13.672377+02:00",
-  "doc_ids": [],
+  "run_at": "2026-10-26T12:18:07.023272+02:00",
+  "doc_ids": [
+    "140789859"
+  ],
   "source_stream": "vs_fallback",
   "source_stream_label": "Верховний Суд (fallback)",
   "selection_window_days": 60
