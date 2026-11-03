@@ -28,7 +28,7 @@
     },
     "public_value": {
       "type": "string",
-      "minLength": 10,
+      "minLength": 1,
       "maxLength": 340
     },
     "topic_tags": {
