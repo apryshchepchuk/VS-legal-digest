@@ -257,7 +257,7 @@ def main() -> None:
         api_key=api_key,
         vertexai=False,
         http_options=types.HttpOptions(
-            api_version="v1",
+            api_version="v1beta",
             timeout=int(settings.get("request_timeout_seconds", 120)) * 1000,
             # Кожен generate_content = одна HTTP-спроба; retry лише в нашому циклі.
             retry_options=types.HttpRetryOptions(attempts=1),
