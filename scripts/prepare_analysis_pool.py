@@ -5,10 +5,12 @@ import logging
 import os
 import subprocess
 import sys
+from collections import defaultdict
 from pathlib import Path
 
 from common import ROOT_DIR, load_json, load_settings, save_json, setup_logging
 from fetch_dataset import ensure_daily_window, run_dir
+from select_full_texts import build_group_key, sort_group_rows, write_tsv
 
 
 def read_tsv(path: Path) -> list[dict]:
@@ -49,6 +51,41 @@ def count_pending_docs(selected_path: Path, processed_doc_ids: set[str]) -> tupl
     return len(rows), len(pending_ids)
 
 
+def exclude_processed_groups(path: Path, processed_doc_ids: set[str]) -> None:
+    """Skip a group only if its latest version has already been analyzed.
+
+    Keep all versions of a new latest document for full-text comparison.
+    Reuse the exact grouping and ordering rules of select_full_texts.py.
+    """
+    if not processed_doc_ids:
+        return
+
+    with path.open("r", encoding="utf-8", newline="") as f:
+        reader = csv.DictReader(f, delimiter="\t")
+        fieldnames = reader.fieldnames
+        rows = list(reader)
+
+    if not fieldnames or not {"doc_id", "cause_num", "adjudication_date", "date_publ"}.issubset(fieldnames):
+        raise ValueError(f"Некоректний заголовок файлу кандидатів: {path}")
+
+    groups = defaultdict(list)
+    for row in rows:
+        groups[build_group_key(row)].append(row)
+
+    excluded_groups = {
+        key for key, group in groups.items()
+        if str(sort_group_rows(group)[0].get("doc_id", "")).strip() in processed_doc_ids
+    }
+    remaining = [row for row in rows if build_group_key(row) not in excluded_groups]
+    if excluded_groups:
+        write_tsv(path, remaining, fieldnames)
+
+    logging.info(
+        "Кандидатів: %s | опрацьованих груп: %s | виключено записів: %s | залишилось: %s",
+        len(rows), len(excluded_groups), len(rows) - len(remaining), len(remaining),
+    )
+
+
 def normalize_windows(windows: object) -> list[int]:
     if not isinstance(windows, list) or not windows:
         return [60, 120, 180, 365]
@@ -87,6 +124,9 @@ def run_selection_pipeline(
 
     ensure_daily_window(settings, window)
     run_script(extract_script_name, env=env)
+    exclude_processed_groups(
+        ROOT_DIR / "data" / "interim" / "vp_candidates.csv", processed_doc_ids
+    )
     run_script("fetch_decision_texts.py", env=env)
     run_script("normalize_rtf.py", env=env)
     run_script("select_full_texts.py", env=env)
