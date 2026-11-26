@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from common import ROOT_DIR, load_json, load_settings, save_json, setup_logging
+from fetch_dataset import ensure_daily_window, run_dir
 
 
 def read_tsv(path: Path) -> list[dict]:
@@ -77,12 +78,14 @@ def run_selection_pipeline(
     processed_doc_ids: set[str],
     selected_path: Path,
     base_env: dict[str, str],
+    settings: dict,
 ) -> tuple[int, int]:
     env = base_env.copy()
     env["LOOKBACK_DAYS_OVERRIDE"] = str(window)
 
     logging.info("Пробую stream=%s, selection window=%s днів", extract_script_name, window)
 
+    ensure_daily_window(settings, window)
     run_script(extract_script_name, env=env)
     run_script("fetch_decision_texts.py", env=env)
     run_script("normalize_rtf.py", env=env)
@@ -140,6 +143,7 @@ def main() -> None:
             processed_doc_ids=processed_doc_ids,
             selected_path=selected_path,
             base_env=base_env,
+            settings=settings,
         )
 
         chosen_stream = "vp"
@@ -184,6 +188,7 @@ def main() -> None:
                     processed_doc_ids=processed_doc_ids,
                     selected_path=selected_path,
                     base_env=base_env,
+                    settings=settings,
                 )
 
                 chosen_stream = "vs_fallback"
@@ -204,10 +209,16 @@ def main() -> None:
             "Аналізуємо наявні.", chosen_pending_count, fallback_min_pending,
         )
 
+    dataset_manifest = load_json(run_dir("daily") / "manifest.json", default={})
     save_json(
         pool_state_path,
         {
             "source_stream": chosen_stream,
+            "dataset_years": dataset_manifest.get("years", []),
+            "dataset_latest_publications": {
+                year: item.get("latest_date_publ")
+                for year, item in dataset_manifest.get("datasets", {}).items()
+            },
             "window_days": chosen_window,
             "selected_count": chosen_selected_count,
             "pending_new_count": chosen_pending_count,
