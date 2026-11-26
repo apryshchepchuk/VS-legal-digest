@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from common import ROOT_DIR, load_json, load_settings, parse_date, setup_logging
+from common import ROOT_DIR, load_json, load_settings, parse_date, save_json, setup_logging
 
 
 def safe_text(value: object, fallback: str = "—") -> str:
@@ -44,12 +46,6 @@ def format_date_only(value: str) -> str:
     return date_obj.strftime("%d.%m.%Y")
 
 
-def get_source_stream_label(source_stream: str) -> str:
-    if source_stream == "vs_fallback":
-        return "Верховний Суд"
-    return "Велика Палата Верховного Суду"
-
-
 def build_post(
     items: list[dict],
     run_at: str,
@@ -63,8 +59,7 @@ def build_post(
     if source_stream == "vs_fallback":
         title = "Щоденний дайджест постанов Верховного Суду"
         intro = (
-            "Сьогодні нових постанов Великої Палати Верховного Суду не виявлено. "
-            "Нижче — добірка постанов Верховного Суду."
+            "Добірка постанов Верховного Суду з пріоритетних категорій."
         )
     else:
         title = "Щоденний дайджест постанов Великої Палати ВС"
@@ -72,17 +67,14 @@ def build_post(
 
     lines.append(title)
     if run_at_display:
-        lines.append(f"Оновлення: {run_at_display}")
+        lines.append(f"Підготовлено: {run_at_display}")
     lines.append("")
 
     if intro:
         lines.append(intro)
         lines.append("")
 
-    if source_stream == "vs_fallback":
-        lines.append(f"Сьогодні підготовлено {len(items)} нових аналізів постанов Верховного Суду.")
-    else:
-        lines.append(f"Сьогодні підготовлено {len(items)} нових аналізів.")
+    lines.append(f"Постанов у добірці: {len(items)}")
     lines.append("")
 
     for idx, item in enumerate(items, start=1):
@@ -114,69 +106,131 @@ def build_post(
     return "\n".join(lines).strip() + "\n"
 
 
+def publication_path() -> Path:
+    return ROOT_DIR / "data" / "state" / "posted_doc_ids.json"
+
+
+def processed_ids() -> set[str]:
+    state = load_json(ROOT_DIR / "data" / "state" / "processed_doc_ids.json", default={})
+    return read_ids(state.get("processed_doc_ids", []), "processed_doc_ids")
+
+
+def read_ids(values, name: str) -> set[str]:
+    if not isinstance(values, list) or any(not isinstance(value, str) or not value.isascii() or not value.isdecimal() for value in values):
+        raise RuntimeError(f"Некоректне поле {name}")
+    return {str(value).strip() for value in values}
+
+
+def save_publication_state(state: dict) -> None:
+    path = publication_path()
+    temp = path.with_suffix(".tmp")
+    save_json(temp, state)
+    temp.replace(path)
+
+
+def load_publication_state(*, initialize: bool = False) -> dict:
+    state = load_json(publication_path(), default={})
+    if not isinstance(state, dict):
+        raise RuntimeError("Некоректний posted_doc_ids.json")
+    posted = read_ids(state.get("posted_doc_ids", []), "posted_doc_ids")
+    flight = state.get("in_flight", [])
+    if len(read_ids(flight, "in_flight")) != len(flight):
+        raise RuntimeError("Дублікати у in_flight")
+    if posted.intersection(flight):
+        raise RuntimeError("in_flight перетинається з posted_doc_ids")
+    if state.get("initialized") is not True:
+        if not initialize or flight:
+            raise RuntimeError("Стан публікації не ініціалізовано")
+        # Старий state був порожнім. Історичні аналізи не публікуємо повторно.
+        if not posted:
+            posted = processed_ids()
+            logging.warning("Міграція: %s історичних аналізів вважаємо опублікованими; фактичну доставку не перевірено", len(posted))
+        state = {"initialized": True, "posted_doc_ids": sorted(posted), "in_flight": []}
+        save_publication_state(state)
+    if "posted_doc_ids" not in state or "in_flight" not in state:
+        raise RuntimeError("Неповний стан публікації")
+    return state
+
+
+def load_analysis(doc_id: str) -> dict:
+    path = ROOT_DIR / "data" / "processed" / "analysis" / f"{doc_id}.json"
+    item = load_json(path, default=None)
+    if not isinstance(item, dict) or str(item.get("doc_id", "")) != doc_id or not str(item.get("telegram_line") or "").strip():
+        raise RuntimeError(f"Відсутній або некоректний аналіз doc_id={doc_id}")
+    return item
+
+
+def stream_of(item: dict) -> str:
+    stream = item.get("source_stream")
+    if stream in ("vp", "vs_fallback"):
+        return stream
+    if str(item.get("court_code", "")) == "9951":
+        return "vp"
+    if str(item.get("court_code", "")) in ("9911", "9921", "9931"):
+        return "vs_fallback"
+    raise RuntimeError(f"Невідомий source_stream для doc_id={item.get('doc_id')}")
+
+
+def select_pending(state: dict, settings: dict) -> list[str]:
+    pending = processed_ids() - read_ids(state["posted_doc_ids"], "posted_doc_ids")
+    if not pending:
+        return []
+    latest = load_json(ROOT_DIR / "data" / "state" / "last_daily_analyzed_doc_ids.json", default={})
+    order = {str(doc_id): i for i, doc_id in enumerate(latest.get("doc_ids", []))}
+    items = [load_analysis(doc_id) for doc_id in pending]
+    # Найстаріша непублікована добірка першою; порядок останнього run зберігаємо.
+    items.sort(key=lambda item: (str(item.get("analyzed_at") or ""), order.get(str(item["doc_id"]), len(order)), str(item["doc_id"])))
+    stream = stream_of(items[0])
+    analyzed_at = str(items[0].get("analyzed_at") or "")
+    key = "vs_fallback_max_docs_per_run" if stream == "vs_fallback" else "max_docs_per_run"
+    limit = min(3, max(1, int(settings.get(key, 3))))
+    return [str(item["doc_id"]) for item in items if stream_of(item) == stream and str(item.get("analyzed_at") or "") == analyzed_at][:limit]
+
+
+def render_batch(doc_ids: list[str], settings: dict) -> str:
+    items = [load_analysis(doc_id) for doc_id in doc_ids]
+    if not items:
+        return ""
+    stream = stream_of(items[0])
+    if any(stream_of(item) != stream for item in items):
+        raise RuntimeError("У добірці змішані джерела")
+    return build_post(items, str(items[0].get("analyzed_at") or ""), settings.get("timezone", "Europe/Kyiv"), stream)
+
+
+def set_pending_output(has_pending: bool) -> None:
+    path = os.getenv("GITHUB_OUTPUT")
+    if path:
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(f"has_pending={str(has_pending).lower()}\n")
+
+
 def main() -> None:
     setup_logging()
     settings = load_settings()
+    state = load_publication_state(initialize=True)
+    output_path = ROOT_DIR / "outputs" / "digest" / "daily_telegram_post.txt"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text("", encoding="utf-8")
 
+    if state.get("in_flight"):
+        raise RuntimeError("Невизначений результат попередньої публікації. Перевірте Telegram та in_flight у posted_doc_ids.json: " + ", ".join(state["in_flight"]))
     if not settings.get("telegram_enabled", False):
-        logging.info("Telegram вимкнено в settings.json")
+        logging.info("Telegram вимкнено; нові аналізи залишатимуться у черзі")
+        set_pending_output(False)
         return
 
-    timezone_name = settings.get("timezone", "Europe/Kyiv")
-
-    state_path = ROOT_DIR / "data" / "state" / "last_daily_analyzed_doc_ids.json"
-    analysis_dir = ROOT_DIR / "data" / "processed" / "analysis"
-    output_dir = ROOT_DIR / "outputs" / "digest"
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    output_path = output_dir / "daily_telegram_post.txt"
-
-    if not state_path.exists():
-        logging.info("Файл %s відсутній, формувати Telegram-пост нічого", state_path)
-        output_path.write_text("", encoding="utf-8")
-        return
-
-    state = load_json(state_path, default={})
-    doc_ids = state.get("doc_ids", []) or []
-    run_at = str(state.get("run_at", "")).strip()
-    source_stream = str(state.get("source_stream", "")).strip() or "vp"
-
+    doc_ids = select_pending(state, settings)
     if not doc_ids:
-        logging.info("Немає нових doc_id для Telegram-поста")
-        output_path.write_text("", encoding="utf-8")
+        logging.info("Немає неопублікованих аналізів")
+        set_pending_output(False)
         return
 
-    items: list[dict] = []
-
-    for doc_id in doc_ids:
-        doc_id_str = str(doc_id).strip()
-        if not doc_id_str:
-            continue
-
-        path = analysis_dir / f"{doc_id_str}.json"
-        item = load_json(path, default={})
-        if not item:
-            logging.warning("Не знайдено JSON-аналіз для doc_id=%s", doc_id_str)
-            continue
-
-        items.append(item)
-
-    if not items:
-        logging.info("Немає JSON-аналізів для побудови щоденного Telegram-поста")
-        output_path.write_text("", encoding="utf-8")
-        return
-
-    post_text = build_post(
-        items=items,
-        run_at=run_at,
-        timezone_name=timezone_name,
-        source_stream=source_stream,
-    )
-    output_path.write_text(post_text, encoding="utf-8")
-
-    logging.info("Сформовано %s", output_path)
-    logging.info("У пост включено %s нових аналізів", len(items))
-    logging.info("source_stream для Telegram-поста: %s", source_stream)
+    output_path.write_text(render_batch(doc_ids, settings), encoding="utf-8")
+    # Workflow зобов'язаний закомітити цей стан ДО виклику Telegram.
+    state["in_flight"] = doc_ids
+    save_publication_state(state)
+    set_pending_output(True)
+    logging.info("Підготовлено %s аналізів до публікації: %s", len(doc_ids), ", ".join(doc_ids))
 
 
 if __name__ == "__main__":
