@@ -1,0 +1,13 @@
+{
+  "2026": {
+    "url": "https://court.gov.ua/storage/portal/open_data_files/91509/7636/05699b3fa59525ada3d66e9d29d32ffb.zip",
+    "source": "passport",
+    "saved_at": "2026-11-26T10:43:02.277151+00:00",
+    "passport_url": "https://dsa.court.gov.ua/open_data_json.php?json=7636",
+    "zip_name": "edrsr_data_2026.zip",
+    "latest_date_publ": "2026-11-25",
+    "age_days": 1,
+    "total_rows": 8658046,
+    "selected_rows": 16171
+  }
+}

@@ -1,9 +1,16 @@
 {
   "source_stream": "vs_fallback",
-  "window_days": 365,
-  "selected_count": 686,
-  "pending_new_count": 194,
-  "min_pending_docs_to_stop": 1,
+  "dataset_years": [
+    2026
+  ],
+  "dataset_latest_publications": {
+    "2026": "2026-11-25"
+  },
+  "window_days": 60,
+  "selected_count": 9,
+  "pending_new_count": 9,
+  "min_pending_docs_to_stop": 5,
+  "vs_fallback_min_pending_docs_to_stop": 5,
   "windows_tried": [
     60,
     120,
