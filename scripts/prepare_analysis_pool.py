@@ -36,16 +36,16 @@ def run_script(script_name: str, env: dict[str, str]) -> None:
 
 def count_pending_docs(selected_path: Path, processed_doc_ids: set[str]) -> tuple[int, int]:
     rows = read_tsv(selected_path)
-    pending = 0
+    pending_ids: set[str] = set()
 
     for row in rows:
         doc_id = str(row.get("doc_id", "")).strip()
         if not doc_id:
             continue
         if doc_id not in processed_doc_ids:
-            pending += 1
+            pending_ids.add(doc_id)
 
-    return len(rows), pending
+    return len(rows), len(pending_ids)
 
 
 def normalize_windows(windows: object) -> list[int]:
@@ -106,7 +106,14 @@ def main() -> None:
     settings = load_settings()
 
     windows = normalize_windows(settings.get("selection_lookback_days_sequence", [60, 120, 180, 365]))
-    min_pending_docs_to_stop = int(settings.get("min_pending_docs_to_stop", 1))
+    min_pending_docs_to_stop = max(1, int(settings.get("min_pending_docs_to_stop", 1)))
+    fallback_max_docs = max(1, int(settings.get("vs_fallback_max_docs_per_run", 3)))
+    # Резерв двох кандидатів на випадок невдалого Gemini-аналізу.
+    fallback_min_pending = fallback_max_docs + 2
+    logging.info(
+        "Ціль пулу: ВП — %s, ВС fallback — %s (ціль аналізу — %s)",
+        min_pending_docs_to_stop, fallback_min_pending, fallback_max_docs,
+    )
 
     vs_fallback_enabled = bool(settings.get("vs_fallback_enabled", False))
     vs_fallback_only_if_no_new_vp = bool(settings.get("vs_fallback_only_if_no_new_vp", True))
@@ -116,7 +123,7 @@ def main() -> None:
     pool_state_path = ROOT_DIR / "data" / "state" / "selected_analysis_pool.json"
 
     state = load_json(state_path, default={"processed_doc_ids": []})
-    processed_doc_ids = set(state.get("processed_doc_ids", []))
+    processed_doc_ids = {str(doc_id).strip() for doc_id in state.get("processed_doc_ids", [])}
 
     base_env = os.environ.copy()
 
@@ -184,12 +191,18 @@ def main() -> None:
                 chosen_selected_count = selected_count
                 chosen_pending_count = pending_count
 
-                if pending_count >= min_pending_docs_to_stop:
+                if pending_count >= fallback_min_pending:
                     logging.info(
-                        "Знайдено достатньо нових постанов ВС fallback для аналізу на window=%s днів",
-                        window,
+                        "Знайдено достатньо нових постанов ВС fallback на window=%s днів: %s/%s",
+                        window, pending_count, fallback_min_pending,
                     )
                     break
+
+    if chosen_stream == "vs_fallback" and chosen_pending_count < fallback_min_pending:
+        logging.info(
+            "Вичерпано вікна ВС fallback: доступно %s із бажаних %s кандидатів. "
+            "Аналізуємо наявні.", chosen_pending_count, fallback_min_pending,
+        )
 
     save_json(
         pool_state_path,
@@ -198,7 +211,10 @@ def main() -> None:
             "window_days": chosen_window,
             "selected_count": chosen_selected_count,
             "pending_new_count": chosen_pending_count,
-            "min_pending_docs_to_stop": min_pending_docs_to_stop,
+            "min_pending_docs_to_stop": (
+                fallback_min_pending if chosen_stream == "vs_fallback" else min_pending_docs_to_stop
+            ),
+            "vs_fallback_min_pending_docs_to_stop": fallback_min_pending,
             "windows_tried": windows,
             "vs_fallback_enabled": vs_fallback_enabled,
             "vs_fallback_only_if_no_new_vp": vs_fallback_only_if_no_new_vp,
