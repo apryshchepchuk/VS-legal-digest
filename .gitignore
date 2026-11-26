@@ -1,0 +1,11 @@
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Temporary datasets and court decision texts
+data/raw/
+data/processed/text/
+
+# Generated files (retained as workflow artifacts when needed)
+data/interim/
+outputs/
