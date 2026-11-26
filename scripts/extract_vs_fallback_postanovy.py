@@ -97,7 +97,6 @@ def main() -> None:
     courts_path = archives_dir / "courts.csv"
 
     output_path = ROOT_DIR / "data" / "interim" / "vp_candidates.csv"
-    debug_output_path = ROOT_DIR / "data" / "interim" / "vs_fallback_candidates.csv"
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -187,12 +186,6 @@ def main() -> None:
         for row in selected_rows:
             writer.writerow(row)
 
-    with debug_output_path.open("w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter="\t")
-        writer.writeheader()
-        for row in selected_rows:
-            writer.writerow(row)
-
     logging.info("Перевірено рядків у documents.csv: %s", total_rows)
     logging.info("Період fallback-відбору постанов ВС: %s днів", lookback_days)
     logging.info("Fallback court codes: %s", ", ".join(sorted(vs_fallback_court_codes)))
@@ -201,7 +194,6 @@ def main() -> None:
     logging.info("Виключено через category_code поза whitelist: %s", excluded_nonwhitelist_category)
     logging.info("Відібрано fallback-постанов ВС до candidate pool: %s", len(selected_rows))
     logging.info("Сформовано %s", output_path)
-    logging.info("Сформовано %s", debug_output_path)
 
 
 if __name__ == "__main__":
