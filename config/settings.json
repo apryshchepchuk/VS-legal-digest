@@ -17,7 +17,6 @@
     365
   ],
   "min_pending_docs_to_stop": 1,
-  "digest_lookback_days": 7,
   "target_court_code": "9951",
   "target_judgment_code": "2",
   "exclude_vp_appellate_admin_cases": true,
