@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -204,6 +205,48 @@ def set_pending_output(has_pending: bool) -> None:
             f.write(f"has_pending={str(has_pending).lower()}\n")
 
 
+def should_skip_scheduled_run(settings: dict, *, now: datetime | None = None) -> bool:
+    """Skip only scheduled runs after a confirmed publication on the local date."""
+    if os.getenv("GITHUB_EVENT_NAME") != "schedule":
+        return False
+
+    state = load_json(publication_path(), default={})
+    if not isinstance(state, dict):
+        raise RuntimeError("Некоректний posted_doc_ids.json")
+    # Не приховуємо неоднозначний результат навіть після іншої публікації сьогодні.
+    if state.get("in_flight"):
+        raise RuntimeError("Невизначений результат попередньої публікації. Перевірте in_flight у posted_doc_ids.json")
+    if state.get("initialized") is not True:
+        return False
+    last_published_at = state.get("last_published_at")
+    if not last_published_at:
+        return False  # Сумісність зі старим state: дату не вигадуємо.
+    try:
+        published = datetime.fromisoformat(last_published_at)
+        if published.tzinfo is None:
+            raise ValueError("timezone required")
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("Некоректне поле last_published_at у posted_doc_ids.json") from exc
+    tz = ZoneInfo(settings.get("timezone", "Europe/Kyiv"))
+    local_now = datetime.now(tz) if now is None else now.astimezone(tz)
+    if published > local_now:
+        raise RuntimeError("last_published_at містить майбутню дату публікації")
+    return published.astimezone(tz).date() == local_now.date()
+
+
+def check_daily_guard() -> None:
+    setup_logging()
+    skip = should_skip_scheduled_run(load_settings())
+    path = os.getenv("GITHUB_OUTPUT")
+    if path:
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(f"skip_daily={str(skip).lower()}\n")
+    if skip:
+        logging.info("Дайджест сьогодні вже опубліковано. Автоматичний запуск пропущено.")
+    else:
+        logging.info("Обмеження щоденної публікації не блокує цей запуск")
+
+
 def main() -> None:
     setup_logging()
     settings = load_settings()
@@ -234,4 +277,9 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    if sys.argv[1:] == ["--check-daily-guard"]:
+        check_daily_guard()
+    elif not sys.argv[1:]:
+        main()
+    else:
+        raise SystemExit("Usage: build_daily_telegram_post.py [--check-daily-guard]")
