@@ -33,16 +33,22 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Check daily publication guard
+        id: guard
+        run: python scripts/build_daily_telegram_post.py --check-daily-guard
+
       - name: Install dependencies
+        if: steps.guard.outputs.skip_daily != 'true'
         run: python -m pip install -r requirements.txt
 
       - name: Check pending publication
         id: pending
+        if: steps.guard.outputs.skip_daily != 'true'
         run: python scripts/build_daily_telegram_post.py
 
       - name: Run daily pipeline
         id: pipeline
-        if: steps.pending.outputs.has_pending != 'true'
+        if: steps.guard.outputs.skip_daily != 'true' && steps.pending.outputs.has_pending != 'true'
         run: |
           python scripts/fetch_dataset.py
           python scripts/prepare_analysis_pool.py
@@ -51,6 +57,7 @@ jobs:
 
       - name: Save analyses before publication
         id: save_analysis
+        if: steps.guard.outputs.skip_daily != 'true'
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
@@ -63,6 +70,7 @@ jobs:
 
       - name: Send to Telegram
         id: publish
+        if: steps.guard.outputs.skip_daily != 'true'
         run: python scripts/send_to_telegram.py
 
       - name: Save publication state
@@ -76,7 +84,7 @@ jobs:
           fi
 
       - name: Upload artifacts
-        if: always()
+        if: ${{ always() && steps.guard.outputs.skip_daily != 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: vp-vs-digest-daily-${{ github.run_id }}
