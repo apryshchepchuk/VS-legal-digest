@@ -7,7 +7,7 @@ from datetime import date
 from pathlib import Path
 from typing import Iterable
 
-from common import ROOT_DIR, parse_date, setup_logging
+from common import ROOT_DIR, load_json, parse_date, setup_logging
 
 
 def read_tsv(path: Path) -> list[dict]:
@@ -142,9 +142,15 @@ def find_case_decision_links(
     if period_field not in {"adjudication_date", "date_publ"}:
         raise ValueError("PERIOD_FIELD має бути 'adjudication_date' або 'date_publ'")
 
-    documents_path = ROOT_DIR / "data" / "raw" / "archives" / "documents.csv"
-    courts_path = ROOT_DIR / "data" / "raw" / "archives" / "courts.csv"
-    instances_path = ROOT_DIR / "data" / "raw" / "archives" / "instances.csv"
+    manifest_path = ROOT_DIR / "data" / "raw" / "archives" / ".case_run" / "manifest.json"
+    manifest = load_json(manifest_path, default={})
+    if not manifest.get("merged") or normalize_case_number(manifest.get("case_number", "")) != normalize_case_number(case_number):
+        raise RuntimeError("Спершу підготуйте вибірку цієї справи через fetch_dataset.py --case-search")
+    logging.info("Роки, охоплені ручним пошуком: %s", manifest.get("years", []))
+
+    documents_path = ROOT_DIR / "data" / "raw" / "archives" / "case_search" / "documents.csv"
+    courts_path = ROOT_DIR / "data" / "raw" / "archives" / "case_search" / "courts.csv"
+    instances_path = ROOT_DIR / "data" / "raw" / "archives" / "case_search" / "instances.csv"
 
     documents_rows = read_tsv(documents_path)
     courts_rows = read_tsv(courts_path)
