@@ -3,9 +3,8 @@ from __future__ import annotations
 import csv
 import logging
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 from common import ROOT_DIR, load_settings, parse_date, setup_logging
 
@@ -102,9 +101,6 @@ def main() -> None:
     setup_logging()
     settings = load_settings()
 
-    tz_name = settings.get("timezone", "Europe/Kyiv")
-    digest_lookback_days = int(settings.get("digest_lookback_days", 7))
-
     min_chars_any_text = int(settings.get("min_chars_any_text", 6000))
     min_chars_single_full = int(settings.get("min_chars_single_full", 12000))
     min_growth_ratio_for_later_version = float(
@@ -115,7 +111,6 @@ def main() -> None:
     text_dir = ROOT_DIR / "data" / "processed" / "text"
 
     selected_path = ROOT_DIR / "data" / "interim" / "vp_selected_for_analysis.csv"
-    weekly_path = ROOT_DIR / "data" / "interim" / "vp_last7.csv"
 
     fieldnames = [
         "doc_id",
@@ -142,7 +137,6 @@ def main() -> None:
     if not rows:
         logging.info("У %s немає записів", input_path)
         write_tsv(selected_path, [], fieldnames)
-        write_tsv(weekly_path, [], fieldnames)
         return
 
     enriched_rows: list[dict] = []
@@ -193,28 +187,14 @@ def main() -> None:
         else:
             skipped_groups += 1
 
-    today = datetime.now(ZoneInfo(tz_name)).date()
-    weekly_cutoff = today - timedelta(days=digest_lookback_days - 1)
-
-    weekly_rows: list[dict] = []
-    for row in selected_rows:
-        date_publ = parse_date(str(row.get("date_publ", "")).strip())
-        if date_publ and date_publ >= weekly_cutoff:
-            weekly_rows.append(row)
-
     selected_rows = sort_group_rows(selected_rows)
-    weekly_rows = sort_group_rows(weekly_rows)
-
     write_tsv(selected_path, selected_rows, fieldnames)
-    write_tsv(weekly_path, weekly_rows, fieldnames)
 
     logging.info("Усього записів у vp_candidates.csv: %s", len(rows))
     logging.info("Усього груп cause_num+adjudication_date: %s", len(groups))
     logging.info("Відібрано записів для analysis pool: %s", len(selected_rows))
-    logging.info("Відібрано записів для last7/digest: %s", len(weekly_rows))
     logging.info("Пропущено груп: %s", skipped_groups)
     logging.info("Сформовано %s", selected_path)
-    logging.info("Сформовано %s", weekly_path)
 
 
 if __name__ == "__main__":
