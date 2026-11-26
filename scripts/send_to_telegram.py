@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+from datetime import datetime, timezone
 
 import requests
 
@@ -89,6 +90,17 @@ def main() -> None:
     posted.update(doc_ids)
     state["posted_doc_ids"] = sorted(posted)
     state["in_flight"] = []
+    # Час фактичної публікації Telegram, а не час аналізу Gemini.
+    # Якщо API не повернув дату, використовуємо час отримання підтвердження.
+    telegram_date = result.get("date")
+    if isinstance(telegram_date, int) and not isinstance(telegram_date, bool) and telegram_date > 0:
+        try:
+            published_at = datetime.fromtimestamp(telegram_date, tz=timezone.utc)
+        except (ValueError, OverflowError, OSError):
+            published_at = datetime.now(timezone.utc)
+    else:
+        published_at = datetime.now(timezone.utc)
+    state["last_published_at"] = published_at.isoformat()
     save_publication_state(state)
     logging.info("Telegram підтвердив публікацію message_id=%s; doc_id=%s", result["message_id"], ", ".join(doc_ids))
 
