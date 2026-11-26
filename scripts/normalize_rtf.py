@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
 from striprtf.striprtf import rtf_to_text
 
@@ -20,21 +19,39 @@ def main() -> None:
         return
 
     converted = 0
+    reused = 0
+    failed = 0
 
     for path in source_dir.iterdir():
         if path.suffix.lower() != ".rtf":
             continue
 
-        raw = path.read_text(encoding="utf-8", errors="ignore")
-        text = rtf_to_text(raw)
-        text = "\n".join(line.rstrip() for line in text.splitlines())
-        text = "\n".join(line for line in text.splitlines() if line.strip()).strip()
-
         out_path = out_dir / f"{path.stem}.txt"
-        out_path.write_text(text, encoding="utf-8")
-        converted += 1
+        if (
+            out_path.is_file()
+            and out_path.stat().st_size > 0
+            and out_path.stat().st_mtime_ns >= path.stat().st_mtime_ns
+        ):
+            reused += 1
+            continue
 
-    logging.info("Сконвертовано RTF у TXT: %s", converted)
+        try:
+            # Remove stale or empty text so a failed conversion cannot be selected.
+            out_path.unlink(missing_ok=True)
+            raw = path.read_text(encoding="utf-8", errors="ignore")
+            text = rtf_to_text(raw)
+            text = "\n".join(line.rstrip() for line in text.splitlines())
+            text = "\n".join(line for line in text.splitlines() if line.strip()).strip()
+            if not text:
+                raise ValueError("Порожній текст після конвертації")
+            out_path.write_text(text, encoding="utf-8")
+            converted += 1
+        except Exception as exc:
+            out_path.unlink(missing_ok=True)
+            failed += 1
+            logging.warning("Не вдалося конвертувати %s: %s", path.name, exc)
+
+    logging.info("TXT: конвертовано=%s | повторно використано=%s | помилок=%s", converted, reused, failed)
 
 
 if __name__ == "__main__":
